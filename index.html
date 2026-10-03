@@ -102,7 +102,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
 .err h3{color:var(--red);margin:0 0 8px}
 .err ol{padding-left:18px;margin:8px 0}
 .err code{background:var(--primary-soft);padding:1px 5px;border-radius:5px}
-#lock input{font:inherit;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);width:240px;text-align:center}
+#lock input{display:block;margin:0 auto 10px;font:inherit;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);width:240px;text-align:center}
 .hidden{display:none!important}
 @media print{
   .filters,.actions,.pager button,#overlay{display:none!important}
@@ -116,10 +116,13 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
   <div class="card" style="padding:28px">
     <div class="logo" style="margin:0 auto 12px">🔒</div>
     <h3 style="font-size:17px">Dashboard Terkunci</h3>
-    <div class="hint">Masukkan PIN akses untuk melanjutkan.</div>
-    <form id="lockForm"><input id="pin" type="password" placeholder="PIN akses" autocomplete="current-password" autofocus><br><br>
-    <button class="primary" type="submit">Buka Dashboard</button>
-    <div id="lockErr" class="sub" style="color:var(--red);margin-top:10px"></div></form>
+    <div class="hint">Silakan login untuk membuka dashboard.</div>
+    <form id="lockForm">
+      <input id="user" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus>
+      <input id="pass" type="password" placeholder="Password" autocomplete="current-password">
+      <button id="lockBtn" class="primary" type="submit" style="width:240px">Masuk</button>
+      <div id="lockErr" class="sub" style="color:var(--red);margin-top:10px;max-width:240px"></div>
+    </form>
   </div>
 </div>
 
@@ -139,6 +142,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
       <button id="btnExport">⬇ Ekspor CSV</button>
       <button id="btnPrint">🖨 Cetak / PDF</button>
       <button id="btnTheme">🌓 Tema</button>
+      <button id="btnLogout" class="hidden">⎋ Keluar</button>
     </div>
   </header>
 
@@ -274,7 +278,11 @@ const CONFIG = {
   SHEET_GID: '',             // kosongkan = tab pertama; isi angka gid bila perlu tab lain
   SHEET_NAME: '',            // alternatif memilih tab lewat nama (memakai sumber gviz, kurang akurat)
   PUBLISHED_CSV_URL: '',     // DIREKOMENDASIKAN: link "Publikasikan ke web" format CSV (paling andal)
-  ACCESS_PIN_SHA256: '',     // opsional: hash SHA-256 dari PIN. Kosong = tanpa kunci
+  AUTH: {                    // login username + password (hanya hash yang disimpan, bukan password). Kosongkan hash = tanpa login
+    salt: '7d4031a9dc07ab4a27355d65d706b90c',
+    iterations: 210000,
+    hash: 'b2ad5521becdf3360b3ceab5726369c75cdaaf79c7b2a5dbd6ff966503301856'
+  },
   AUTO_REFRESH_MIN: 5        // muat ulang data otomatis tiap N menit (0 = nonaktif)
 };
 /* ===================================================== */
@@ -894,22 +902,47 @@ function exportCsv(){
   a.download = `penjualan_${ymd(new Date())}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-/* ---------- kunci PIN opsional ---------- */
-async function sha256(s){
-  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+/* ---------- login username + password ---------- */
+const authOn = () => !!(CONFIG.AUTH && CONFIG.AUTH.hash);
+const hex2buf = h => Uint8Array.from(h.match(/.{2}/g).map(b => parseInt(b, 16)));
+const buf2hex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+async function deriveHash(user, pass){
+  const A = CONFIG.AUTH;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(user.trim().toLowerCase() + '\u0000' + pass), 'PBKDF2', false, ['deriveBits']);
+  return buf2hex(await crypto.subtle.deriveBits({name:'PBKDF2', salt:hex2buf(A.salt), iterations:A.iterations, hash:'SHA-256'}, key, 256));
 }
-function unlocked(){ try { return sessionStorage.getItem('dash_ok') === CONFIG.ACCESS_PIN_SHA256; } catch(e){ return false; } }
+function unlocked(){ try { return sessionStorage.getItem('dash_ok') === CONFIG.AUTH.hash; } catch(e){ return false; } }
+function lockLeft(){ try { return Math.max(0, Math.ceil(((+localStorage.getItem('dash_lock') || 0) - Date.now()) / 1000)); } catch(e){ return 0; } }
+function failed(){
+  try {
+    const n = (+localStorage.getItem('dash_fail') || 0) + 1;
+    if (n >= 5){ localStorage.setItem('dash_lock', String(Date.now() + 30000)); localStorage.setItem('dash_fail', '0'); }
+    else localStorage.setItem('dash_fail', String(n));
+  } catch(e){}
+}
+function logout(){ try { sessionStorage.removeItem('dash_ok'); } catch(e){} location.reload(); }
 function gate(){
   return new Promise(res => {
-    if (!CONFIG.ACCESS_PIN_SHA256 || unlocked()) return res();
+    if (!authOn() || unlocked()) return res();
     const lock = $('#lock'); lock.classList.remove('hidden'); lock.style.display = 'grid'; $('#overlay').classList.add('hidden');
     $('#lockForm').addEventListener('submit', async e => {
       e.preventDefault();
-      if (await sha256($('#pin').value) === CONFIG.ACCESS_PIN_SHA256){
-        try { sessionStorage.setItem('dash_ok', CONFIG.ACCESS_PIN_SHA256); } catch(_){}
-        lock.style.display = 'none'; $('#overlay').classList.remove('hidden'); res();
-      } else { $('#lockErr').textContent = 'PIN salah. Coba lagi.'; $('#pin').select(); }
+      const err = $('#lockErr'), btn = $('#lockBtn');
+      const wait = lockLeft();
+      if (wait > 0){ err.textContent = `Terlalu banyak percobaan. Coba lagi ${wait} detik lagi.`; return; }
+      btn.disabled = true; err.textContent = '';
+      try {
+        const h = await deriveHash($('#user').value, $('#pass').value);
+        if (h === CONFIG.AUTH.hash){
+          try { sessionStorage.setItem('dash_ok', CONFIG.AUTH.hash); localStorage.setItem('dash_fail', '0'); } catch(_){}
+          lock.style.display = 'none'; $('#overlay').classList.remove('hidden'); res();
+          return;
+        }
+        failed();
+        err.textContent = 'Username atau password salah.'; $('#pass').value = ''; $('#pass').focus();
+      } catch(ex){
+        err.textContent = 'Login memerlukan koneksi aman (https). Buka lewat alamat https://…github.io.';
+      } finally { btn.disabled = false; }
     });
   });
 }
@@ -953,7 +986,9 @@ function bind(){
   document.title = CONFIG.TITLE; $('#ttl').textContent = CONFIG.TITLE;
   try { const t = localStorage.getItem('dash_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(e){}
   bind();
+  $('#btnLogout').addEventListener('click', logout);
   await gate();
+  if (authOn()) $('#btnLogout').classList.remove('hidden');
   themeChart();
   await load();
   if (CONFIG.AUTO_REFRESH_MIN > 0) setInterval(load, CONFIG.AUTO_REFRESH_MIN * 60000);
