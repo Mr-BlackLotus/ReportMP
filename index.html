@@ -50,7 +50,9 @@ button:disabled{opacity:.5;cursor:default}
 .banner{border:1px solid var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--card));border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px}
 .banner b{color:var(--amber)}
 .banner code{background:var(--primary-soft);padding:1px 5px;border-radius:5px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:6px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:6px}
+@media(min-width:1300px){.kpis{grid-template-columns:repeat(6,1fr)}.kpi .v{font-size:19px!important}}
+@media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr);gap:10px}.kpi .v{font-size:16px!important}}
 .cmp{color:var(--muted);font-size:12px;margin:0 2px 14px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
 .kpi .l{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
@@ -69,7 +71,9 @@ button:disabled{opacity:.5;cursor:default}
 .seg button{border:0;border-radius:0;padding:5px 11px;font-size:12px;background:transparent}
 .seg button.on{background:var(--primary);color:#fff}
 .cv{position:relative;height:300px}.cv.s{height:260px}
-.insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.insights{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:1100px){.insights{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.insights{grid-template-columns:1fr}}
 .ins{display:flex;gap:10px;padding:10px 12px;background:var(--primary-soft);border-radius:11px}
 .ins i{font-style:normal;font-size:18px}
 .ins b.t{display:block;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
@@ -580,9 +584,18 @@ function renderKPIs(rows, prev, prng){
     ['Rata-rata / Order', fmtRp(k.aov), fmtC(k.aov), d(k.aov, pk && pk.aov)]
   ];
   $('#kpis').innerHTML = cards.map(c => `<div class="card kpi"><div class="l">${c[0]}</div><div class="v">${c[1]}</div><div class="s">${esc(c[2])} ${c[3]}</div></div>`).join('');
+  fillLast($('#kpis'));
   $('#cmpHint').textContent = prng ? `Persentase dibanding periode sebelumnya: ${fmtRange(prng)}${S.p.mode === 'month' || S.p.mode === 'year' ? ' (jumlah hari disamakan bila periode masih berjalan)' : ''}` : '';
 }
 
+/* kartu terakhir melebar bila baris terakhir tidak penuh, supaya tidak ada ruang kosong */
+function fillLast(el){
+  const kids = [...el.children];
+  kids.forEach(c => { c.style.gridColumn = ''; });
+  const cols = getComputedStyle(el).gridTemplateColumns.split(' ').filter(Boolean).length;
+  const rem = kids.length % cols;
+  if (kids.length && rem) kids[kids.length - 1].style.gridColumn = `span ${cols - rem + 1}`;
+}
 function renderInsights(rows){
   if (!rows.length){ $('#insights').innerHTML = '<div class="ins"><i>ℹ️</i><div>Tidak ada data untuk filter ini.</div></div>'; return; }
   const k = kpis(rows);
@@ -602,7 +615,10 @@ function renderInsights(rows){
   if (byProd[0]) out.push(['🔥', 'Produk Terlaris (Unit)', `<b>${esc(byProd[0].key.length > 60 ? byProd[0].key.slice(0, 60) + '…' : byProd[0].key)}</b> — ${fmtInt(byProd[0].qty)} unit.`]);
   const days = byDay.length;
   out.push(['📈', 'Rata-rata Harian', `${fmtC(k.total / days)} omzet dan ${fmtInt(k.orders / days)} order per hari aktif (${days} hari).`]);
+  const bigOrd = agg(rows.filter(r => r.ref), r => r.ref).sort((a, b) => b.total - a.total)[0];
+  if (bigOrd) out.push(['💎', 'Order Terbesar', `<b>${esc(bigOrd.key)}</b> senilai ${fmtRp(bigOrd.total)}.`]);
   $('#insights').innerHTML = out.map(o => `<div class="ins"><i>${o[0]}</i><div><b class="t">${o[1]}</b>${o[2]}</div></div>`).join('');
+  fillLast($('#insights'));
 }
 
 function bucketing(rows, g, rng){
@@ -928,6 +944,7 @@ function bind(){
     const k = th.dataset.k; S.sort = {k, dir: S.sort.k === k ? -S.sort.dir : (k === 'ts' || ['qty','price','fee','total'].includes(k) ? -1 : 1)};
     render();
   });
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { fillLast($('#kpis')); fillLast($('#insights')); }, 150); });
   $('#pgPrev').addEventListener('click', () => { S.page--; render(); });
   $('#pgNext').addEventListener('click', () => { S.page++; render(); });
 }
