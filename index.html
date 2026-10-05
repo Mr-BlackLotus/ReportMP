@@ -126,7 +126,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
   </div>
 </div>
 
-<div id="overlay"><div class="box" id="ovBox"><div class="spin"></div><div><b>Memuat data dari Google Sheets…</b></div><div class="sub">Mohon tunggu sebentar</div></div></div>
+<div id="overlay"><div class="box" id="ovBox"><div class="spin"></div><div><b>Memuat data dari Google Sheets…</b></div><div class="sub" id="ovMsg">Mohon tunggu sebentar</div></div></div>
 
 <div class="wrap">
   <header class="top">
@@ -275,15 +275,22 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
 const CONFIG = {
   TITLE: 'Dashboard Penjualan Marketplace',
   SHEET_ID: '18xs8rtUKVHD-vxxT-fakmn457WGDF4YfJJTR8cPk0F8',
-  SHEET_GID: '',             // kosongkan = tab pertama; isi angka gid bila perlu tab lain
-  SHEET_NAME: '',            // alternatif memilih tab lewat nama (memakai sumber gviz, kurang akurat)
-  PUBLISHED_CSV_URL: '',     // DIREKOMENDASIKAN: link "Publikasikan ke web" format CSV (paling andal)
+  // SEMUA tab yang punya kolom date, Total, dan reference_no/product_name dibaca otomatis (sales_2025, sales_2026, sales_2027, …).
+  // Tab baru cukup ditambahkan di Google Sheet; tidak perlu mengubah file ini.
+  EXCLUDE_TABS: [],          // nama tab yang TIDAK ingin dibaca (tab berawalan _ atau ~ otomatis dilewati)
+  // --- hanya dipakai jalur cadangan bila unduhan lengkap semua tab diblokir browser ---
+  SHEET_GID: '',             // gid tab pertama (kosong = tab pertama)
+  PUBLISHED_CSV_URL: '',     // link "Publikasikan ke web" format CSV untuk tab pertama (opsional)
+  TAB_GIDS: [],              // opsional, manual: gid tab lain, mis. ['123456789'] (angka setelah #gid= di URL tab)
+  TAB_PREFIX: 'sales_',      // awalan nama tab yang dicari otomatis: sales_2020 … sales_(tahun ini + PROBE_YEARS_AHEAD)
+  PROBE_FROM_YEAR: 2020,
+  PROBE_YEARS_AHEAD: 5,
   AUTH: {                    // login username + password (hanya hash yang disimpan, bukan password). Kosongkan hash = tanpa login
     salt: '7d4031a9dc07ab4a27355d65d706b90c',
     iterations: 210000,
     hash: 'b2ad5521becdf3360b3ceab5726369c75cdaaf79c7b2a5dbd6ff966503301856'
   },
-  AUTO_REFRESH_MIN: 5        // muat ulang data otomatis tiap N menit (0 = nonaktif)
+  AUTO_REFRESH_MIN: 10       // muat ulang data otomatis tiap N menit saat halaman terbuka (0 = nonaktif)
 };
 /* ===================================================== */
 
@@ -347,9 +354,8 @@ function parseDT(v, hint){
   } else if ((m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/))){
     d = +m[1]; mo = +m[2]; y = +m[3]; if (y < 100) y += 2000;
     rest = s.slice(m[0].length);
-    if (hint && mo !== hint && d === hint && mo >= 1 && mo <= 31){ const t = d; d = mo; mo = t; }
   } else if (/^\d{5}(\.\d+)?$/.test(s)){
-    const dt = new Date(Math.round((parseFloat(s) - 25569) * 864e5));
+    const dt = new Date(Math.round((parseFloat(s) - 25569) * 86400) * 1000);   // nomor seri tanggal Excel/Sheets, dibulatkan ke detik
     y = dt.getUTCFullYear(); mo = dt.getUTCMonth() + 1; d = dt.getUTCDate(); h = dt.getUTCHours(); mi = dt.getUTCMinutes();
   } else return null;
   if (rest){
@@ -359,6 +365,8 @@ function parseDT(v, hint){
       if (t[3]){ const pm = t[3].toLowerCase() === 'pm'; if (pm && h < 12) h += 12; else if (!pm && h === 12) h = 0; }
     }
   }
+  /* sel tanggal asli Google Sheets sering terbaca terbalik hari/bulan (mis. 2 Jan jadi 1 Feb); kolom "Bulan" jadi penentu */
+  if (hint && mo !== hint && d === hint && mo >= 1 && mo <= 31){ const t = d; d = mo; mo = t; }
   if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
   const date = new Date(y, mo - 1, d, h, mi);
   if (date.getMonth() + 1 !== mo || date.getDate() !== d) return null;
@@ -368,7 +376,7 @@ function parseDT(v, hint){
 const isTwin = (dom, mo) => dom === mo || dom === mo + 1;   // 1&2 Jan, 2&3 Feb, ... 8&9 Agu, ... 12&13 Des
 const isPeak = dom => dom === 25;
 
-function buildRows(recs){
+function buildRows(recs, tab){
   const rows = [], skipped = [];
   let mism = 0, sumAll = 0, nRec = 0;
   for (const r of recs){
@@ -386,7 +394,7 @@ function buildRows(recs){
       d: dt.date, ts: +dt.date, day: `${dt.y}-${pad(dt.mo)}-${pad(dt.d)}`, ym: `${dt.y}-${pad(dt.mo)}`,
       y: dt.y, mo: dt.mo, dom: dt.d, hour: dt.h, dow: (dt.date.getDay() + 6) % 7,
       tw: isTwin(dt.d, dt.mo), pk: isPeak(dt.d),
-      admin: String(r.first_name || '').trim() || '-', ref, pid: String(r.product_id || '').trim(),
+      tab: tab || '', admin: String(r.first_name || '').trim() || '-', ref, pid: String(r.product_id || '').trim(),
       name: String(r.product_name || '').trim(), price, qty, fee, total, gross: total - fee,
       units: cat === 'Biaya Lain' ? 0 : qty,
       cat, brand: String(r.brand || 'Lainnya').trim(), plat: String(r.platform || '-').trim() || '-'
@@ -424,6 +432,152 @@ function prevRange(p, rng, maxDay){
     return {from: `${y}-01-01`, to};
   }
   return null;
+}
+
+/* ============ pembaca XLSX ringan (tanpa library) ============
+   File "export?format=xlsx" dari Google Sheets berisi SEMUA tab beserta namanya,
+   jadi tab baru (sales_2027, dst.) otomatis ikut terbaca. Nilai sel dibaca apa adanya:
+   tanggal asli = nomor seri, tanggal teks = teks, angka = angka. Tidak ada sel yang hilang. */
+const u16 = (b, o) => b[o] | (b[o + 1] << 8);
+const u32 = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+const xmlUnesc = s => s.indexOf('&') < 0 ? s : s.replace(/&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, (m, e) => {
+  if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+  return {amp:'&', lt:'<', gt:'>', quot:'"', apos:"'"}[e];
+});
+function zipEntries(b){
+  let e = b.length - 22;
+  for (; e >= Math.max(0, b.length - 65557); e--) if (u32(b, e) === 0x06054b50) break;
+  if (e < 0 || u32(b, e) !== 0x06054b50) throw new Error('Bukan file XLSX/ZIP yang valid');
+  const n = u16(b, e + 10); let p = u32(b, e + 16);
+  const dec = new TextDecoder(), map = new Map();
+  for (let i = 0; i < n; i++){
+    if (u32(b, p) !== 0x02014b50) throw new Error('Struktur ZIP rusak');
+    const method = u16(b, p + 10), comp = u32(b, p + 20), size = u32(b, p + 24);
+    const nl = u16(b, p + 28), el = u16(b, p + 30), cl = u16(b, p + 32), off = u32(b, p + 42);
+    if (comp === 0xFFFFFFFF || off === 0xFFFFFFFF) throw new Error('ZIP64 tidak didukung');
+    map.set(dec.decode(b.subarray(p + 46, p + 46 + nl)), {method, comp, size, off});
+    p += 46 + nl + el + cl;
+  }
+  return map;
+}
+function entryStream(b, ent){
+  if (u32(b, ent.off) !== 0x04034b50) throw new Error('Struktur ZIP rusak');
+  const s = ent.off + 30 + u16(b, ent.off + 26) + u16(b, ent.off + 28);
+  const raw = new Blob([b.subarray(s, s + ent.comp)]).stream();
+  if (ent.method === 0) return raw;
+  if (ent.method !== 8) throw new Error('Jenis kompresi ZIP tidak didukung');
+  return raw.pipeThrough(new DecompressionStream('deflate-raw'));
+}
+async function streamText(stream, onText){
+  const rd = stream.getReader(), dec = new TextDecoder();
+  for (;;){
+    const {done, value} = await rd.read(); if (done) break;
+    if (onText(dec.decode(value, {stream:true})) === false){ await rd.cancel(); return; }
+  }
+  onText(dec.decode());
+}
+const entryText = async (b, ent) => { let t = ''; await streamText(entryStream(b, ent), c => { t += c; }); return t; };
+function parseSST(xml){
+  const out = [], re = /<si(?:\s[^>]*)?(?:\/>|>([\s\S]*?)<\/si>)/g;
+  xml = xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '');
+  let m;
+  while ((m = re.exec(xml))){
+    let s = '';
+    if (m[1]){ const tr = /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g; let t; while ((t = tr.exec(m[1]))) s += t[1]; }
+    out.push(xmlUnesc(s));
+  }
+  return out;
+}
+function parseWorkbookMeta(wbXml, relsXml){
+  const targets = {}; let m;
+  const rr = /<Relationship\b([^>]*?)\/?>/g;
+  while ((m = rr.exec(relsXml))){
+    const id = /\bId="([^"]*)"/.exec(m[1]), tg = /\bTarget="([^"]*)"/.exec(m[1]);
+    if (id && tg) targets[id[1]] = tg[1];
+  }
+  const sheets = [], sr = /<sheet\b([^>]*?)\/?>/g;
+  while ((m = sr.exec(wbXml))){
+    const a = m[1], name = /\bname="([^"]*)"/.exec(a), rid = /\br:id="([^"]*)"/.exec(a), st = /\bstate="([^"]*)"/.exec(a);
+    if (!name || !rid || !targets[rid[1]]) continue;
+    const t = targets[rid[1]];
+    sheets.push({name: xmlUnesc(name[1]), path: t.startsWith('/') ? t.slice(1) : 'xl/' + t, state: st ? st[1] : 'visible'});
+  }
+  return sheets;
+}
+const colIdx = s => { let n = 0; for (let i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64); return n - 1; };
+async function parseSheet(b, ent, sst, onRow){
+  let buf = '';
+  const handle = seg => {
+    const rr = /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g; let m;
+    while ((m = rr.exec(seg))){
+      if (m[2] === undefined) continue;
+      const rm = /\br="(\d+)"/.exec(m[1]), cells = [];
+      const cr = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g; let c;
+      while ((c = cr.exec(m[2]))){
+        const at = c[1], cm = /\br="([A-Z]+)\d*"/.exec(at);
+        if (!cm || c[2] === undefined) continue;
+        const tm = /\bt="([^"]*)"/.exec(at), t = tm ? tm[1] : 'n', inner = c[2];
+        let v;
+        if (t === 'inlineStr'){
+          let s = ''; const tr = /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g; let q;
+          while ((q = tr.exec(inner))) s += q[1];
+          v = xmlUnesc(s);
+        } else {
+          const vm = /<v>([\s\S]*?)<\/v>/.exec(inner);
+          if (!vm) continue;
+          v = t === 's' ? sst[+vm[1]] : (t === 'str' || t === 'd') ? xmlUnesc(vm[1]) : t === 'b' ? vm[1] === '1' : t === 'e' ? '' : parseFloat(vm[1]);
+        }
+        cells[colIdx(cm[1])] = v;
+      }
+      if (onRow(rm ? +rm[1] : 0, cells) === false) return false;
+    }
+    return true;
+  };
+  await streamText(entryStream(b, ent), chunk => {
+    buf += chunk;
+    const p = buf.lastIndexOf('</row>');
+    if (p < 0) return true;
+    const seg = buf.slice(0, p + 6); buf = buf.slice(p + 6);
+    return handle(seg);
+  });
+}
+const normHeader = h => String(h ?? '').trim().toLowerCase();
+const hasDataCols = f => f.includes('date') && f.includes('total') && (f.includes('reference_no') || f.includes('product_name'));
+async function readSheetRecords(b, ents, sst, sheet){
+  const ent = ents.get(sheet.path);
+  if (!ent) return null;
+  let fields = null; const data = [];
+  await parseSheet(b, ent, sst, (ri, cells) => {
+    if (!fields){
+      const names = Array.from(cells, normHeader);
+      if (hasDataCols(names)){ fields = names; return true; }
+      return ri <= 20;                       // judul kolom dicari di 20 baris pertama
+    }
+    const rec = {}; let any = false;
+    for (let i = 0; i < fields.length; i++){
+      const k = fields[i]; if (!k || k in rec) continue;
+      const v = cells[i]; if (v === undefined || v === '') continue;
+      rec[k] = v; any = true;
+    }
+    if (any) data.push(rec);
+    return true;
+  });
+  return fields ? {name: sheet.name, fields, data} : null;
+}
+async function readWorkbookBytes(bytes, opt = {}){
+  const ents = zipEntries(bytes);
+  const need = n => { const e = ents.get(n); if (!e) throw new Error('File XLSX tidak lengkap: ' + n); return e; };
+  const sheets = parseWorkbookMeta(await entryText(bytes, need('xl/workbook.xml')), await entryText(bytes, need('xl/_rels/workbook.xml.rels')));
+  const sstEnt = ents.get('xl/sharedStrings.xml');
+  const sst = sstEnt ? parseSST(await entryText(bytes, sstEnt)) : [];
+  const tabs = [], ignored = [];
+  for (const sh of sheets){
+    if (opt.exclude && opt.exclude(sh.name)){ ignored.push({name: sh.name, why: 'dikecualikan'}); continue; }
+    if (opt.onTab) opt.onTab(sh.name);
+    const r = await readSheetRecords(bytes, ents, sst, sh);
+    if (r) tabs.push(r); else ignored.push({name: sh.name, why: 'kolom data tidak ditemukan'});
+  }
+  return {tabs, ignored, sheetNames: sheets.map(s => s.name)};
 }
 /*CORE-END*/
 
@@ -803,6 +957,8 @@ function resetAll(){
 
 /* ---------- ambil data ---------- */
 const sheetBase = () => `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}`;
+const setStatus = m => { const el = $('#ovMsg'); if (el) el.textContent = m; };
+const colLetter = i => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
 async function fetchText(u){
   const r = await fetch(u, {cache:'no-store'});
   if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -816,87 +972,157 @@ function parseCsv(text){
   if (!(f.includes('date') && f.includes('total'))) throw new Error('Kolom "date" dan "Total" tidak ditemukan di sheet');
   return {data:p.data, fields:f};
 }
-/* urutan sumber: link publikasi (jika diisi) → export CSV (semua sel terbaca apa adanya) → gviz (cadangan; sel tanggal bertipe campuran bisa hilang) */
-async function getRecords(){
-  const b = sheetBase(), gid = CONFIG.SHEET_GID ? '&gid=' + CONFIG.SHEET_GID : '';
-  const tries = [];
-  if (CONFIG.PUBLISHED_CSV_URL) tries.push({src:'publikasi', url:CONFIG.PUBLISHED_CSV_URL});
-  if (!CONFIG.SHEET_NAME) tries.push({src:'export', url:`${b}/export?format=csv${gid}`});
-  tries.push({src:'gviz', url:`${b}/gviz/tq?tqx=out:csv${CONFIG.SHEET_NAME ? '&sheet=' + encodeURIComponent(CONFIG.SHEET_NAME) : ''}${gid}`});
-  let last;
-  for (const t of tries){
-    try { const text = await fetchText(t.url); return Object.assign({src:t.src}, parseCsv(text)); }
-    catch(e){ last = e; }
+async function fetchBytes(u, onProgress){
+  const r = await fetch(u, {cache:'no-store'});
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  if (/text\/html/i.test(r.headers.get('content-type') || '')) throw new Error('Respons bukan XLSX (sheet belum dibagikan publik?)');
+  if (!r.body || !r.body.getReader) return new Uint8Array(await r.arrayBuffer());
+  const rd = r.body.getReader(), parts = []; let n = 0;
+  for (;;){
+    const {done, value} = await rd.read(); if (done) break;
+    parts.push(value); n += value.length; if (onProgress) onProgress(n);
   }
-  throw last;
+  const out = new Uint8Array(n); let o = 0;
+  for (const p of parts){ out.set(p, o); o += p.length; }
+  return out;
 }
-const colLetter = i => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
-/* pembanding independen: biarkan Google Sheets sendiri menjumlahkan kolom Total & menghitung baris */
-async function sheetTruth(fields){
-  try {
-    const cT = colLetter(fields.indexOf('total')), cR = colLetter(fields.indexOf('reference_no'));
-    const q = encodeURIComponent(`select count(${cR}), sum(${cT})`);
-    const t = await fetchText(`${sheetBase()}/gviz/tq?tqx=out:csv&tq=${q}`);
-    const row = Papa.parse(t, {skipEmptyLines:true}).data[1];
-    return row ? {count:num(row[0]), sum:num(row[1])} : null;
-  } catch(e){ return null; }
-}
-function showDiag(truth){
-  const D = S.diag, ban = [];
-  const sk = D.skipped, skSum = sk.reduce((s, x) => s + x.total, 0);
-  if (sk.length){
-    const ex = sk.slice(0, 3).map(x => `${esc(x.ref || '?')} ("${esc(x.raw)}")`).join(', ');
-    ban.push(`<b>⚠ ${fmtInt(sk.length)} baris tidak masuk hitungan</b> (senilai ${fmtRp(skSum)}) karena tanggalnya tidak terbaca. Contoh: ${ex}.` +
-      (D.src === 'gviz' ? `<br>Dashboard sedang memakai sumber cadangan (<code>gviz</code>) yang menghilangkan sel tanggal bertipe campuran. <b>Solusi:</b> di Google Sheet pilih <i>File → Bagikan → Publikasikan ke web</i> → format <b>CSV</b> → salin link ke <code>PUBLISHED_CSV_URL</code> di <code>index.html</code>.` : '<br>Periksa format kolom <code>date</code> pada baris tersebut.'));
-  }
-  if (D.mism) ban.push(`<b>ℹ</b> ${fmtInt(D.mism)} baris memiliki bulan di kolom tanggal yang berbeda dengan kolom <code>Bulan</code>.`);
-  let vtxt = '', vcls = 'ok';
-  if (truth){
-    const ok = Math.abs(truth.sum - D.sumAll) < 1 && truth.count === D.nRec && !sk.length;
-    if (ok) vtxt = `✓ Terverifikasi: ${fmtInt(D.nRec)} baris dan total ${fmtRp(D.sumAll)} sama dengan hitungan Google Sheets`;
-    else { vcls = 'warn'; vtxt = `⚠ Google Sheets: ${fmtInt(truth.count)} baris / ${fmtRp(truth.sum)} · Dashboard membaca: ${fmtInt(D.nRec)} baris / ${fmtRp(D.sumAll - skSum)} dihitung`; }
-    if (Math.abs(truth.sum - D.sumAll) >= 1 || truth.count !== D.nRec)
-      ban.push(`<b>⚠ Selisih dengan Google Sheets:</b> sheet ${fmtInt(truth.count)} baris / ${fmtRp(truth.sum)}, dashboard membaca ${fmtInt(D.nRec)} baris / ${fmtRp(D.sumAll)}.`);
-  } else { vcls = 'warn'; vtxt = 'Verifikasi otomatis ke Google Sheets tidak tersedia saat ini'; }
-  $('#banner').innerHTML = ban.length ? `<div class="banner">${ban.join('<hr style="border:0;border-top:1px solid var(--border);margin:8px 0">')}</div>` : '';
-  const v = $('#verify'); v.className = vcls; v.textContent = vtxt;
+const isExcluded = name => /^[_~]/.test(name) || (CONFIG.EXCLUDE_TABS || []).some(x => String(x).toLowerCase() === name.toLowerCase());
+
+/* JALUR UTAMA: unduh seluruh spreadsheet (semua tab) sebagai XLSX, lalu baca tiap tab. Tab baru otomatis ikut. */
+async function getViaXlsx(){
+  if (typeof DecompressionStream === 'undefined') throw new Error('browser ini belum mendukung DecompressionStream');
+  const bytes = await fetchBytes(`${sheetBase()}/export?format=xlsx`, n => setStatus(`Mengunduh seluruh tab… ${(n / 1048576).toFixed(1)} MB`));
+  setStatus('Membaca isi tab…');
+  const res = await readWorkbookBytes(bytes, {exclude:isExcluded, onTab:n => setStatus(`Membaca tab ${n}…`)});
+  if (!res.tabs.length) throw new Error('tidak ada tab dengan kolom date, Total, dan reference_no di file XLSX');
+  return {src:'xlsx', tabs:res.tabs, ignored:res.ignored};
 }
 
-async function load(){
+/* pembanding/penemu tab lewat Google Sheets sendiri (query ringan: jumlah baris & jumlah kolom Total) */
+async function gvizAgg(sheetName, fields){
+  const cT = colLetter(fields.indexOf('total')), cR = colLetter(fields.indexOf(fields.includes('reference_no') ? 'reference_no' : 'date'));
+  const q = encodeURIComponent(`select count(${cR}), sum(${cT})`);
+  const t = await fetchText(`${sheetBase()}/gviz/tq?tqx=out:csv${sheetName ? '&sheet=' + encodeURIComponent(sheetName) : ''}&tq=${q}`);
+  const row = Papa.parse(t, {skipEmptyLines:true}).data[1];
+  return row ? {count:num(row[0]), sum:num(row[1])} : null;
+}
+/* JALUR CADANGAN: tab pertama (export CSV, lengkap) + tab sales_TAHUN yang ditemukan lewat gviz.
+   Catatan: gviz menghilangkan sel tanggal yang tipenya tercampur; kekurangannya ditandai peringatan di dashboard. */
+async function getViaCsv(){
+  const b = sheetBase(), gid = CONFIG.SHEET_GID ? '&gid=' + CONFIG.SHEET_GID : '';
+  setStatus('Membaca tab pertama…');
+  let first, last;
+  for (const u of [CONFIG.PUBLISHED_CSV_URL, `${b}/export?format=csv${gid}`].filter(Boolean)){
+    try { first = parseCsv(await fetchText(u)); break; } catch(e){ last = e; }
+  }
+  if (!first) throw last;
+  const tabs = [{name:'(tab pertama)', fields:first.fields, data:first.data, first:true}];
+  const gids = CONFIG.TAB_GIDS || [];
+  for (const g of gids){
+    try { const p = parseCsv(await fetchText(`${b}/export?format=csv&gid=${encodeURIComponent(g)}`)); tabs.push({name:'gid ' + g, fields:p.fields, data:p.data}); } catch(e){}
+  }
+  if (!gids.length){
+    setStatus(`Mencari tab ${CONFIG.TAB_PREFIX}TAHUN…`);
+    const y1 = new Date().getFullYear() + CONFIG.PROBE_YEARS_AHEAD, names = [];
+    for (let y = CONFIG.PROBE_FROM_YEAR; y <= y1; y++) names.push(CONFIG.TAB_PREFIX + y);
+    const base = await gvizAgg('', first.fields).catch(() => null);
+    const probes = await Promise.all(names.map(n => gvizAgg(n, first.fields).then(a => ({n, a})).catch(() => ({n, a:null}))));
+    for (const {n, a} of probes){
+      if (!a || !a.count) continue;
+      if (base && a.count === base.count && Math.abs(a.sum - base.sum) < 1) continue;   // nama tab tidak ada → Google mengembalikan tab pertama
+      setStatus(`Membaca tab ${n}…`);
+      try { const p = parseCsv(await fetchText(`${b}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(n)}`)); tabs.push({name:n, fields:p.fields, data:p.data, lossy:true}); } catch(e){}
+    }
+  }
+  return {src:'csv', tabs, ignored:[]};
+}
+async function getRecords(){
+  let why;
+  try { return await getViaXlsx(); } catch(e){ why = e && e.message ? e.message : String(e); console.warn('Jalur XLSX gagal:', e); }
+  const r = await getViaCsv();
+  r.fallbackReason = why;
+  return r;
+}
+async function tabTruth(t){
+  try { return /^gid /.test(t.name) ? null : await gvizAgg(t.first ? '' : t.name, t.fields); } catch(e){ return null; }
+}
+
+function showDiag(truths){
+  const D = S.diag, ban = [], vl = [];
+  let ok = !!truths;
+  D.tabs.forEach((t, i) => {
+    const tr = truths ? truths[i] : null, sk = t.skipped, skSum = sk.reduce((s, x) => s + x.total, 0);
+    if (sk.length){
+      const ex = sk.slice(0, 3).map(x => `${esc(x.ref || '?')} ("${esc(x.raw)}")`).join(', ');
+      ban.push(`<b>⚠ Tab ${esc(t.name)}: ${fmtInt(sk.length)} baris tidak masuk hitungan</b> (senilai ${fmtRp(skSum)}) karena tanggalnya tidak terbaca. Contoh: ${ex}.` +
+        (t.lossy ? '<br>Tab ini dibaca lewat jalur cadangan yang menghilangkan sel tanggal bertipe campuran.' : '<br>Periksa format kolom <code>date</code> pada baris tersebut.'));
+    }
+    if (t.mism) ban.push(`<b>ℹ</b> Tab ${esc(t.name)}: ${fmtInt(t.mism)} baris memiliki bulan di kolom tanggal yang berbeda dengan kolom <code>Bulan</code>.`);
+    if (tr){
+      const same = Math.abs(tr.sum - t.sumAll) < 1 && tr.count === t.nRec;
+      if (same && !sk.length) vl.push(`✓ ${t.name}: ${fmtInt(t.nRec)} baris · ${fmtRp(t.sumAll)}`);
+      else {
+        ok = false; vl.push(`⚠ ${t.name}: Sheets ${fmtInt(tr.count)} baris / ${fmtRp(tr.sum)}, dashboard ${fmtInt(t.nRec - sk.filter(x => x.ref).length)} / ${fmtRp(t.sumAll - skSum)}`);
+        if (!same) ban.push(`<b>⚠ Selisih dengan Google Sheets (tab ${esc(t.name)}):</b> sheet ${fmtInt(tr.count)} baris / ${fmtRp(tr.sum)}, dashboard membaca ${fmtInt(t.nRec)} baris / ${fmtRp(t.sumAll)}.`);
+      }
+    } else if (truths){ ok = false; vl.push(`? ${t.name}: tidak bisa diverifikasi`); }
+  });
+  for (const ig of D.ignored || []) if (/sales/i.test(ig.name) && ig.why !== 'dikecualikan')
+    ban.push(`<b>⚠ Tab ${esc(ig.name)} dilewati:</b> ${esc(ig.why)}. Pastikan baris judul memuat kolom <code>date</code>, <code>Total</code>, dan <code>reference_no</code>.`);
+  if (D.src === 'csv') ban.unshift(`<b>ℹ Mode cadangan:</b> pembacaan lengkap semua tab tidak bisa dilakukan browser ini (${esc(D.fallbackReason || 'alasan tidak diketahui')}). Dashboard hanya membaca tab pertama dan tab <code>${esc(CONFIG.TAB_PREFIX)}TAHUN</code> yang berhasil ditemukan, sehingga data bisa kurang lengkap.`);
+  $('#banner').innerHTML = ban.length ? `<div class="banner">${ban.join('<hr style="border:0;border-top:1px solid var(--border);margin:8px 0">')}</div>` : '';
+  const v = $('#verify');
+  v.className = truths ? (ok ? 'ok' : 'warn') : '';
+  v.textContent = truths ? (ok ? '✓ Terverifikasi dengan hitungan Google Sheets — ' : '') + vl.join(' · ') : 'Memverifikasi data ke Google Sheets…';
+}
+
+let loading = false;
+async function load(silent){
+  if (loading) return;
+  loading = true;
   const btn = $('#btnRefresh'); btn.disabled = true; btn.textContent = '⏳ Memuat…';
   try {
     const res = await getRecords();
-    const built = buildRows(res.data);
-    if (!built.rows.length) throw new Error('Tidak ada baris data yang valid. Pastikan header kolom sesuai (date, product_name, Total, dst.).');
-    S.all = built.rows;
-    S.diag = {src:res.src, skipped:built.skipped, mism:built.mism, sumAll:built.sumAll, nRec:built.nRec};
-    let mn = S.all[0].day, mx = S.all[0].day;
-    for (const r of S.all){ if (r.day < mn) mn = r.day; if (r.day > mx) mx = r.day; }
+    setStatus('Menyusun laporan…');
+    const rows = [], per = [];
+    for (const t of res.tabs){
+      const bt = buildRows(t.data, t.name);
+      per.push({name:t.name, fields:t.fields, lossy:!!t.lossy, rows:bt.rows.length, skipped:bt.skipped, mism:bt.mism, sumAll:bt.sumAll, nRec:bt.nRec});
+      for (const r of bt.rows) rows.push(r);
+      t.data = null;
+    }
+    if (!rows.length) throw new Error('Tidak ada baris data yang valid. Pastikan header kolom sesuai (date, product_name, Total, dst.).');
+    S.all = rows;
+    const diag = S.diag = {src:res.src, tabs:per, ignored:res.ignored || [], fallbackReason:res.fallbackReason};
+    let mn = rows[0].day, mx = rows[0].day;
+    for (const r of rows){ if (r.day < mn) mn = r.day; if (r.day > mx) mx = r.day; }
     S.minDay = mn; S.maxDay = mx;
-    const first = !S.loadedOnce; S.loadedOnce = true;
+    const first = !S.loadedOnce; S.loadedOnce = true; S.lastLoad = Date.now();
     initFilters(); initPeriod(); if (first) autoGroup();
     render();
     $('#updated').textContent = `Data ${fmtDay(mn)} – ${fmtDay(mx)} · diperbarui ${new Date().toLocaleString('id-ID', {dateStyle:'medium', timeStyle:'short'})}`;
-    $('#rowInfo').textContent = `${fmtInt(S.all.length)} baris data dimuat · sumber: ${res.src}`;
+    $('#rowInfo').textContent = `${fmtInt(rows.length)} baris dari ${per.length} tab (${per.map(t => t.name).join(', ')}) · sumber: ${res.src === 'xlsx' ? 'unduhan lengkap semua tab' : 'jalur cadangan'}`;
     showDiag(null);
     $('#overlay').classList.add('hidden');
-    sheetTruth(res.fields).then(t => { if (S.diag) showDiag(t); });
+    Promise.all(res.tabs.map(tabTruth)).then(ts => { if (S.diag === diag) showDiag(ts); });
   } catch(e){
-    if (S.all.length){ alert('Gagal memperbarui data: ' + e.message); }
-    else {
+    if (S.all.length){
+      if (silent) $('#updated').textContent += ' · pembaruan otomatis gagal, data lama masih ditampilkan';
+      else alert('Gagal memperbarui data: ' + e.message);
+    } else {
       $('#ovBox').innerHTML = `<div class="err"><h3>Data tidak dapat dimuat</h3><div>${esc(e.message)}</div>
       <ol><li>Buka Google Sheet → <b>Bagikan</b> → <i>Siapa saja yang memiliki link</i> → <b>Pelihara (Viewer)</b>.</li>
-      <li>Atau: <b>File → Bagikan → Publikasikan ke web</b> → pilih sheet &amp; format <b>CSV</b> → salin link ke <code>PUBLISHED_CSV_URL</code> di file ini.</li>
-      <li>Pastikan membuka halaman lewat <code>https://</code> (bukan file langsung), mis. GitHub Pages.</li></ol>
+      <li>Pastikan membuka halaman lewat <code>https://</code> (bukan file langsung), mis. GitHub Pages.</li>
+      <li>Pastikan baris judul tiap tab memuat kolom <code>date</code>, <code>Total</code>, dan <code>reference_no</code>.</li></ol>
       <button class="primary" onclick="location.reload()">Coba Lagi</button></div>`;
     }
-  } finally { btn.disabled = false; btn.textContent = '↻ Perbarui Data'; }
+  } finally { loading = false; btn.disabled = false; btn.textContent = '↻ Perbarui Data'; }
 }
 
 /* ---------- ekspor ---------- */
 function exportCsv(){
   if (!S.view.length) return;
-  const out = S.view.map(r => ({Tanggal:`${r.day} ${pad(r.hour)}:${pad(r.d.getMinutes())}`, No_Order:r.ref, Toko_Admin:r.admin, Product_ID:r.pid, Produk:r.name, Kategori:r.cat, Brand:r.brand, Platform:r.plat, Qty:r.qty, Harga:r.price, Fee:r.fee, Total:r.total}));
+  const out = S.view.map(r => ({Tanggal:`${r.day} ${pad(r.hour)}:${pad(r.d.getMinutes())}`, Tab:r.tab, No_Order:r.ref, Toko_Admin:r.admin, Product_ID:r.pid, Produk:r.name, Kategori:r.cat, Brand:r.brand, Platform:r.plat, Qty:r.qty, Harga:r.price, Fee:r.fee, Total:r.total}));
   const blob = new Blob(['﻿' + Papa.unparse(out)], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `penjualan_${ymd(new Date())}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -958,7 +1184,7 @@ function bind(){
   $('#pMode').addEventListener('change', () => { S.p.mode = $('#pMode').value; showPeriodControls(); autoGroup(); syncFromUI(); });
   let t; $('#fQ').addEventListener('input', () => { clearTimeout(t); t = setTimeout(syncFromUI, 250); });
   $('#btnReset').addEventListener('click', resetAll);
-  $('#btnRefresh').addEventListener('click', load);
+  $('#btnRefresh').addEventListener('click', () => load(false));
   $('#btnExport').addEventListener('click', exportCsv);
   $('#btnPrint').addEventListener('click', () => window.print());
   $('#btnTheme').addEventListener('click', () => setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
@@ -991,7 +1217,11 @@ function bind(){
   if (authOn()) $('#btnLogout').classList.remove('hidden');
   themeChart();
   await load();
-  if (CONFIG.AUTO_REFRESH_MIN > 0) setInterval(load, CONFIG.AUTO_REFRESH_MIN * 60000);
+  if (CONFIG.AUTO_REFRESH_MIN > 0){
+    const ms = CONFIG.AUTO_REFRESH_MIN * 60000;
+    setInterval(() => { if (!document.hidden) load(true); }, ms);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && S.lastLoad && Date.now() - S.lastLoad > ms) load(true); });
+  }
 })();
 })();
 </script>
