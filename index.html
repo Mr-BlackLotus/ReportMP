@@ -36,17 +36,15 @@ button:disabled{opacity:.5;cursor:default}
 .fbar{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
 .fbar label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;font-weight:600}
 .fbar select,.fbar input[type=date],.fbar input[type=search]{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text)}
-.pwrap{grid-column:span 2}
+.pwrap{grid-column:span 2;position:relative}
 .prow{display:flex;gap:6px}
-.prow select,.prow input{flex:1;min-width:0}
-.prow #pMode{flex:0 0 130px}
 .prow button{padding:6px 11px;font-weight:700}
 .live{color:var(--green);font-weight:700;text-transform:none;letter-spacing:0;margin-left:4px}
 .chips{display:flex;gap:10px;flex-wrap:wrap;grid-column:1/-1;align-items:center}
 .chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-left:auto}
 .fbar .chk{text-transform:none;letter-spacing:0;font-weight:400;margin-bottom:0}
 .plabel{font-weight:600;color:var(--primary);font-size:13px}
-@media(max-width:700px){.pwrap{grid-column:1/-1}.prow{flex-wrap:wrap}.prow #pMode{flex:1 0 100%}}
+@media(max-width:700px){.pwrap{grid-column:1/-1}.prow{flex-wrap:wrap}}
 .banner{border:1px solid var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--card));border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px}
 .banner b{color:var(--amber)}
 .banner code{background:var(--primary-soft);padding:1px 5px;border-radius:5px}
@@ -119,7 +117,32 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
 .tbl tfoot td{font-weight:600;border-top:2px solid var(--border)}
 .mapx{margin-top:12px}.mapx summary{cursor:pointer;font-weight:600;color:var(--primary)}
 .mapx textarea{width:100%;margin-top:8px;font:inherit;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)}
-@media print{.nav,.editor{display:none!important}}
+.prow{position:static}
+.pbtn{flex:1;min-width:0;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;font-weight:400!important;padding:7px 11px!important}
+.pbtn #pBtnTxt{display:flex;gap:8px;align-items:baseline;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbtn b{color:var(--text)}
+.ppop{position:absolute;z-index:60;top:calc(100% + 6px);left:0;display:flex;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.2);overflow:hidden;max-width:calc(100vw - 24px)}
+.pl{width:200px;padding:8px 0;border-right:1px solid var(--border);flex:none}
+.pl button{display:flex;justify-content:space-between;width:100%;border:0;border-radius:0;background:transparent;padding:9px 16px;text-align:left;font-weight:500}
+.pl button.on{color:var(--primary);font-weight:700}
+.pl button.act{background:color-mix(in srgb,var(--primary) 9%,transparent)}
+.pl hr{border:0;border-top:1px solid var(--border);margin:6px 14px}
+.pr{width:310px;padding:12px 14px}
+.pnav{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700}
+.pnav button{border:0;background:transparent;padding:2px 12px;font-size:18px}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pgrid button{border:0;background:transparent;padding:13px 0;border-radius:8px}
+.pgrid button:hover:not(:disabled){background:color-mix(in srgb,var(--primary) 10%,transparent)}
+.pgrid button.sel,.pcal button.sel{background:var(--primary);color:#fff}
+.pgrid button:disabled,.pcal button:disabled{opacity:.35;cursor:default}
+.pcal{display:grid;grid-template-columns:repeat(7,1fr);row-gap:2px}
+.pcal .dow{font-size:11px;color:var(--muted);text-align:center;padding:4px 0;font-weight:600}
+.pcal button{border:0;background:transparent;padding:8px 0;border-radius:0;font-variant-numeric:tabular-nums}
+.pcal button.sel{border-radius:8px}
+.pcal button.inwk,.pcal button.hov{background:color-mix(in srgb,var(--primary) 18%,transparent);color:var(--text)}
+.pcal button.last{text-decoration:underline;text-underline-offset:3px}
+@media(max-width:640px){.ppop{flex-direction:column;left:0;right:0;max-height:75vh;overflow:auto}.pl{width:auto;border-right:0;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap}.pl button{width:auto}.pl hr{display:none}.pr{width:auto}}
+@media print{.nav,.editor,.ppop{display:none!important}}
 </style>
 </head>
 <body>
@@ -165,19 +188,10 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
       <div class="pwrap">
         <label>Periode Data <span class="live" title="Pilihan periode dibuat otomatis dari data terbaru di database">● Real-Time</span></label>
         <div class="prow">
-          <select id="pMode">
-            <option value="all">Semua Data</option>
-            <option value="day">Per Hari</option>
-            <option value="week">Per Minggu</option>
-            <option value="month" selected>Per Bulan</option>
-            <option value="year">Per Tahun</option>
-          </select>
-          <input type="date" id="pDay" class="hidden">
-          <select id="pWeek" class="hidden"></select>
-          <select id="pMonth"></select>
-          <select id="pYear" class="hidden"></select>
           <button id="pPrev" title="Periode sebelumnya">‹</button>
+          <button id="pBtn" class="pbtn" aria-haspopup="dialog" aria-expanded="false"><span id="pBtnTxt"></span><span class="ico" aria-hidden="true">📅</span></button>
           <button id="pNext" title="Periode berikutnya">›</button>
+          <div class="ppop hidden" id="pPop" role="dialog" aria-label="Pilih periode data"></div>
         </div>
       </div>
       <div><label>Platform</label><select id="fPlat"></select></div>
@@ -474,8 +488,9 @@ function buildRows(recs, tab){
   return {rows, skipped, mism, sumAll, nRec};
 }
 
-function periodRange(p){
+function periodRange(p, maxDay){
   switch (p.mode){
+    case 'last':  return maxDay && p.n > 0 ? {from: addDaysStr(maxDay, -(p.n - 1)), to: maxDay} : null;
     case 'day':   return p.day ? {from: p.day, to: p.day} : null;
     case 'week':  return p.week ? {from: p.week, to: addDaysStr(p.week, 6)} : null;
     case 'month': return p.month ? {from: p.month + '-01', to: p.month + '-' + pad(daysInMonth(+p.month.slice(0, 4), +p.month.slice(5, 7)))} : null;
@@ -488,6 +503,7 @@ function prevRange(p, rng, maxDay){
   if (!rng) return null;
   const partial = maxDay >= rng.from && maxDay < rng.to;
   if (p.mode === 'day') { const x = addDaysStr(rng.from, -1); return {from: x, to: x}; }
+  if (p.mode === 'last') return {from: addDaysStr(rng.from, -p.n), to: addDaysStr(rng.from, -1)};
   if (p.mode === 'week') return {from: addDaysStr(rng.from, -7), to: addDaysStr(rng.from, -1)};
   if (p.mode === 'month'){
     const y = +p.month.slice(0, 4), m = +p.month.slice(5, 7);
@@ -750,7 +766,7 @@ const weekLabel = ws => `Minggu ${isoWeek(ws)} · ${fmtDay(ws, {day:'2-digit', m
 /* ---------- state ---------- */
 const S = {
   all:[], charts:{}, minDay:'', maxDay:'', lists:{years:[], months:[], weeks:[]},
-  p:{mode:'month', day:'', week:'', month:'', year:''},
+  p:{mode:'month', day:'', week:'', month:'', year:'', n:30},
   f:{plat:'', admin:'', cat:'', brand:'', q:'', pack:true, event:'all'},
   trendGroup:'day', trendMetric:'total', topBy:'total',
   route:'dash', page:1, perPage:25, sort:{k:'ts', dir:-1}, view:[], diag:null
@@ -803,9 +819,10 @@ function mk(id, cfg){
 const axisRp = {ticks:{callback:v => fmtC(v)}, grid:{color:() => css('--border')}};
 
 /* ---------- periode ---------- */
-function curRange(){ return periodRange(S.p); }
+function curRange(){ return periodRange(S.p, S.maxDay); }
 function periodTitle(){
   const p = S.p;
+  if (p.mode === 'last') return `${p.n} hari terakhir · ${fmtRange(curRange())}`;
   if (p.mode === 'all') return `Semua data · ${fmtDay(S.minDay)} – ${fmtDay(S.maxDay)}`;
   if (p.mode === 'day') return fmtDay(p.day, {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
   if (p.mode === 'week') return weekLabel(p.week);
@@ -814,17 +831,8 @@ function periodTitle(){
 }
 function autoGroup(){
   const m = S.p.mode;
-  S.trendGroup = m === 'day' ? 'hour' : (m === 'week' || m === 'month') ? 'day' : 'month';
+  S.trendGroup = m === 'day' ? 'hour' : (m === 'week' || m === 'month' || m === 'last') ? 'day' : 'month';
   $$('#segGroup button').forEach(b => b.classList.toggle('on', b.dataset.v === S.trendGroup));
-}
-function showPeriodControls(){
-  const m = S.p.mode;
-  $('#pDay').classList.toggle('hidden', m !== 'day');
-  $('#pWeek').classList.toggle('hidden', m !== 'week');
-  $('#pMonth').classList.toggle('hidden', m !== 'month');
-  $('#pYear').classList.toggle('hidden', m !== 'year');
-  $('#pPrev').classList.toggle('hidden', m === 'all');
-  $('#pNext').classList.toggle('hidden', m === 'all');
 }
 function initPeriod(){
   const days = [...new Set(S.all.map(r => r.day))];
@@ -832,32 +840,124 @@ function initPeriod(){
   S.lists.months = [...new Set(S.all.map(r => r.ym))].sort().reverse();
   S.lists.weeks = [...new Set(days.map(wk))].sort().reverse();
   const L = S.lists, p = S.p;
-  $('#pYear').innerHTML = L.years.map(y => `<option value="${y}">Tahun ${y}</option>`).join('');
-  $('#pMonth').innerHTML = L.months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join('');
-  $('#pWeek').innerHTML = L.weeks.map(w => `<option value="${w}">${esc(weekLabel(w))}</option>`).join('');
-  const dayEl = $('#pDay'); dayEl.min = S.minDay; dayEl.max = S.maxDay;
   if (!p.year || !L.years.includes(p.year)) p.year = L.years[0];
   if (!p.month || !L.months.includes(p.month)) p.month = L.months[0];
   if (!p.week || !L.weeks.includes(p.week)) p.week = L.weeks[0];
   if (!p.day || p.day < S.minDay || p.day > S.maxDay) p.day = S.maxDay;
-  $('#pYear').value = p.year; $('#pMonth').value = p.month; $('#pWeek').value = p.week; dayEl.value = p.day;
-  $('#pMode').value = p.mode;
-  showPeriodControls();
+  if (!(p.n > 0)) p.n = 30;
+  updatePeriodBtn();
 }
 function stepPeriod(dir){
   const p = S.p;
   if (p.mode === 'day'){
     const n = addDaysStr(p.day, dir);
     if (n >= S.minDay && n <= S.maxDay) p.day = n;
-    $('#pDay').value = p.day;
+  } else if (p.mode === 'week'){
+    const n = addDaysStr(p.week, 7 * dir);
+    if (n <= wk(S.maxDay) && addDaysStr(n, 6) >= S.minDay) p.week = n;
+  } else if (p.mode === 'month'){
+    const n = shiftMonth(p.month, dir);
+    if (n >= S.minDay.slice(0, 7) && n <= S.maxDay.slice(0, 7)) p.month = n;
+  } else if (p.mode === 'year'){
+    const n = String(+p.year + dir);
+    if (n >= S.minDay.slice(0, 4) && n <= S.maxDay.slice(0, 4)) p.year = n;
+  } else return;
+  S.page = 1; updatePeriodBtn(); render();
+}
+
+/* ---------- Periode Data: tombol + kalender pop-up ---------- */
+const MON3 = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const PM = {sec:'month', vy:0, vm:''};
+const SECS = [['day','Per Hari'], ['week','Per Minggu'], ['month','Per Bulan'], ['year','Berdasarkan Tahun']];
+function quickItems(){
+  const y = addDaysStr(S.maxDay, -1);
+  return [
+    ['q-last', 'Hari Terakhir Data', {mode:'day', day:S.maxDay}, S.p.mode === 'day' && S.p.day === S.maxDay, false],
+    ['q-yest', 'Kemarin', {mode:'day', day:y}, S.p.mode === 'day' && S.p.day === y, y < S.minDay],
+    ['q-7', '7 Hari Terakhir', {mode:'last', n:7}, S.p.mode === 'last' && S.p.n === 7, false],
+    ['q-30', '30 Hari Terakhir', {mode:'last', n:30}, S.p.mode === 'last' && S.p.n === 30, false],
+    ['q-all', 'Semua Data', {mode:'all'}, S.p.mode === 'all', false]
+  ];
+}
+function periodBtnLabel(){
+  const p = S.p;
+  if (p.mode === 'all') return ['Semua Data', `${fmtDay(S.minDay)} – ${fmtDay(S.maxDay)}`];
+  if (p.mode === 'last') return [`${p.n} Hari Terakhir`, fmtRange(curRange())];
+  if (p.mode === 'day') return ['Per Hari', fmtDay(p.day)];
+  if (p.mode === 'week') return ['Per Minggu', fmtRange(curRange())];
+  if (p.mode === 'month') return ['Per Bulan', monthLabel(p.month)];
+  return ['Berdasarkan Tahun', p.year];
+}
+function updatePeriodBtn(){
+  const [a, b] = periodBtnLabel();
+  $('#pBtnTxt').innerHTML = `<b>${esc(a)}</b> <span>${esc(b)}</span>`;
+  const nav = S.p.mode === 'all' || S.p.mode === 'last';
+  $('#pPrev').classList.toggle('hidden', nav); $('#pNext').classList.toggle('hidden', nav);
+}
+function applyPeriod(patch){
+  Object.assign(S.p, patch); S.page = 1;
+  autoGroup(); updatePeriodBtn(); closePop(); render();
+}
+function popOpen(){ return !$('#pPop').classList.contains('hidden'); }
+function closePop(){ $('#pPop').classList.add('hidden'); $('#pBtn').setAttribute('aria-expanded', 'false'); }
+function openPop(){
+  const p = S.p;
+  PM.sec = ['day', 'week', 'month', 'year'].includes(p.mode) ? p.mode : 'month';
+  const ref = p.mode === 'day' ? p.day : p.mode === 'week' ? p.week : p.mode === 'month' ? p.month + '-01' : p.mode === 'year' ? p.year + '-01-01' : S.maxDay;
+  PM.vy = +ref.slice(0, 4); PM.vm = ref.slice(0, 7);
+  renderPop(); $('#pPop').classList.remove('hidden'); $('#pBtn').setAttribute('aria-expanded', 'true');
+}
+function renderPop(){
+  const p = S.p;
+  const left = quickItems().map(q => `<button data-q="${q[0]}" class="${q[3] ? 'on' : ''}" ${q[4] ? 'disabled' : ''}>${q[1]}</button>`).join('') +
+    '<hr>' + SECS.map(s => `<button data-sec="${s[0]}" class="sec ${PM.sec === s[0] ? 'act' : ''} ${p.mode === s[0] ? 'on' : ''}">${s[1]}<span>›</span></button>`).join('');
+  let right = '';
+  const minY = +S.minDay.slice(0, 4), maxY = +S.maxDay.slice(0, 4);
+  if (PM.sec === 'month'){
+    right = `<div class="pnav"><button data-vy="-1" ${PM.vy <= minY ? 'disabled' : ''} aria-label="Tahun sebelumnya">«</button><span>${PM.vy}</span><button data-vy="1" ${PM.vy >= maxY ? 'disabled' : ''} aria-label="Tahun berikutnya">»</button></div><div class="pgrid">` +
+      MON3.map((n, i) => { const ym = `${PM.vy}-${pad(i + 1)}`, ok = S.lists.months.includes(ym); return `<button data-ym="${ym}" ${ok ? '' : 'disabled'} class="${p.mode === 'month' && p.month === ym ? 'sel' : ''}">${n}</button>`; }).join('') + '</div>';
+  } else if (PM.sec === 'year'){
+    const ys = []; for (let y = minY; y <= maxY; y++) ys.push(y);
+    right = `<div class="pnav"><span style="margin:auto">Pilih Tahun</span></div><div class="pgrid">` +
+      ys.map(y => `<button data-yr="${y}" ${S.lists.years.includes(String(y)) ? '' : 'disabled'} class="${p.mode === 'year' && p.year === String(y) ? 'sel' : ''}">${y}</button>`).join('') + '</div>';
   } else {
-    const key = {week:'weeks', month:'months', year:'years'}[p.mode]; if (!key) return;
-    const list = S.lists[key], i = list.indexOf(p[p.mode]);
-    const j = Math.min(list.length - 1, Math.max(0, i - dir));
-    p[p.mode] = list[j];
-    $({week:'#pWeek', month:'#pMonth', year:'#pYear'}[p.mode]).value = p[p.mode];
+    const y = +PM.vm.slice(0, 4), m = +PM.vm.slice(5, 7);
+    const off = (toDate(PM.vm + '-01').getDay() + 6) % 7, dim = daysInMonth(y, m);
+    const prevOk = PM.vm > S.minDay.slice(0, 7), nextOk = PM.vm < S.maxDay.slice(0, 7);
+    let cells = ['Sen','Sel','Rab','Kam','Jum','Sab','Min'].map(d => `<div class="dow">${d}</div>`).join('') + '<span></span>'.repeat(off);
+    for (let d = 1; d <= dim; d++){
+      const ds = `${PM.vm}-${pad(d)}`, ok = ds >= S.minDay && ds <= S.maxDay, w = wk(ds);
+      const sel = PM.sec === 'day' ? (p.mode === 'day' && p.day === ds) : false;
+      const inwk = PM.sec === 'week' && p.mode === 'week' && p.week === w;
+      cells += `<button data-d="${ds}" data-wk="${w}" ${ok ? '' : 'disabled'} class="${sel ? 'sel' : ''} ${inwk ? 'inwk' : ''} ${ds === S.maxDay ? 'last' : ''}">${d}</button>`;
+    }
+    right = `<div class="pnav"><button data-vm="-1" ${prevOk ? '' : 'disabled'} aria-label="Bulan sebelumnya">«</button><span>${BULAN_ID[m - 1]} ${y}</span><button data-vm="1" ${nextOk ? '' : 'disabled'} aria-label="Bulan berikutnya">»</button></div>
+      <div class="pcal">${cells}</div><div class="sub" style="margin-top:8px">${PM.sec === 'week' ? 'Klik tanggal mana pun untuk memilih minggunya (Senin–Minggu).' : 'Pilih tanggal.'} Garis bawah = tanggal data terakhir.</div>`;
   }
-  S.page = 1; render();
+  $('#pPop').innerHTML = `<div class="pl">${left}</div><div class="pr">${right}</div>`;
+}
+function shiftMonth(vm, d){ let y = +vm.slice(0, 4), m = +vm.slice(5, 7) + d; if (m < 1){ m = 12; y--; } if (m > 12){ m = 1; y++; } return `${y}-${pad(m)}`; }
+function bindPeriod(){
+  $('#pBtn').addEventListener('click', e => { e.stopPropagation(); popOpen() ? closePop() : openPop(); });
+  $('#pPop').addEventListener('click', e => {
+    e.stopPropagation();
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    const D = b.dataset;
+    if (D.q){ const q = quickItems().find(x => x[0] === D.q); if (q) applyPeriod(q[2]); }
+    else if (D.sec){ PM.sec = D.sec; renderPop(); }
+    else if (D.vy){ PM.vy += +D.vy; renderPop(); }
+    else if (D.vm){ PM.vm = shiftMonth(PM.vm, +D.vm); renderPop(); }
+    else if (D.ym) applyPeriod({mode:'month', month:D.ym});
+    else if (D.yr) applyPeriod({mode:'year', year:D.yr});
+    else if (D.d) applyPeriod(PM.sec === 'week' ? {mode:'week', week:D.wk} : {mode:'day', day:D.d});
+  });
+  $('#pPop').addEventListener('mouseover', e => {
+    if (PM.sec !== 'week') return;
+    const b = e.target.closest('button[data-wk]'), w = b && !b.disabled ? b.dataset.wk : null;
+    $$('#pPop .pcal button').forEach(x => x.classList.toggle('hov', !!w && x.dataset.wk === w));
+  });
+  document.addEventListener('click', () => { if (popOpen()) closePop(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && popOpen()){ closePop(); $('#pBtn').focus(); } });
 }
 
 /* ---------- render ---------- */
@@ -1304,8 +1404,6 @@ function initFilters(){
 }
 function syncFromUI(){
   const f = S.f, p = S.p;
-  p.mode = $('#pMode').value; p.day = $('#pDay').value || p.day; p.week = $('#pWeek').value || p.week;
-  p.month = $('#pMonth').value || p.month; p.year = $('#pYear').value || p.year;
   f.plat = $('#fPlat').value; f.admin = $('#fAdmin').value; f.cat = $('#fCat').value; f.brand = $('#fBrand').value;
   f.q = $('#fQ').value.trim(); f.pack = $('#fPack').checked; S.page = 1;
   render();
@@ -1313,7 +1411,7 @@ function syncFromUI(){
 function resetAll(){
   $('#fQ').value = ''; $('#fPack').checked = true;
   S.f = {plat:'', admin:'', cat:'', brand:'', q:'', pack:true, event:'all'};
-  S.p = {mode:'month', day:'', week:'', month:'', year:''};
+  S.p = {mode:'month', day:'', week:'', month:'', year:'', n:30};
   $$('#segEvent button').forEach(b => b.classList.toggle('on', b.dataset.v === 'all'));
   initFilters(); initPeriod(); autoGroup(); S.page = 1; render();
 }
@@ -1544,8 +1642,8 @@ function setTheme(t){
   if (window.Chart){ themeChart(); if (S.all.length) render(); }
 }
 function bind(){
-  ['#pDay','#pWeek','#pMonth','#pYear','#fPlat','#fAdmin','#fCat','#fBrand','#fPack'].forEach(i => $(i).addEventListener('change', syncFromUI));
-  $('#pMode').addEventListener('change', () => { S.p.mode = $('#pMode').value; showPeriodControls(); autoGroup(); syncFromUI(); });
+  ['#fPlat','#fAdmin','#fCat','#fBrand','#fPack'].forEach(i => $(i).addEventListener('change', syncFromUI));
+  bindPeriod();
   let t; $('#fQ').addEventListener('input', () => { clearTimeout(t); t = setTimeout(syncFromUI, 250); });
   $('#btnReset').addEventListener('click', resetAll);
   $('#btnRefresh').addEventListener('click', () => load(false));
