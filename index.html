@@ -108,6 +108,18 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
   .filters,.actions,.pager button,#overlay{display:none!important}
   body{background:#fff}.card{box-shadow:none;break-inside:avoid}.scroll{max-height:none;overflow:visible}
 }
+.tbl td.r,.tbl th.r{white-space:nowrap}
+.nav{display:flex;gap:6px;margin:0 0 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.nav a{padding:9px 16px;border-radius:10px 10px 0 0;text-decoration:none;color:var(--muted);font-weight:600;border:1px solid transparent;border-bottom:0;margin-bottom:-1px}
+.nav a:hover{color:var(--primary)}
+.nav a.on{color:var(--primary);background:var(--card);border-color:var(--border)}
+.mapin{width:100%;font:inherit;padding:6px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)}
+.tbl tr.clk{cursor:pointer}.tbl tr.clk:hover td{background:color-mix(in srgb,var(--primary) 7%,transparent)}
+.tbl tr.mut td{color:var(--muted);font-style:italic}
+.tbl tfoot td{font-weight:600;border-top:2px solid var(--border)}
+.mapx{margin-top:12px}.mapx summary{cursor:pointer;font-weight:600;color:var(--primary)}
+.mapx textarea{width:100%;margin-top:8px;font:inherit;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)}
+@media print{.nav,.editor{display:none!important}}
 </style>
 </head>
 <body>
@@ -146,6 +158,8 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
     </div>
   </header>
 
+  <nav class="nav"><a href="#dash" id="navDash" class="on">📊 Dashboard Penjualan</a><a href="#admin" id="navAdmin">🧑‍💼 Admin Report</a></nav>
+
   <section class="filters">
     <div class="fbar">
       <div class="pwrap">
@@ -167,10 +181,10 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
         </div>
       </div>
       <div><label>Platform</label><select id="fPlat"></select></div>
-      <div><label>Toko / Admin</label><select id="fAdmin"></select></div>
-      <div><label>Kategori</label><select id="fCat"></select></div>
-      <div><label>Brand</label><select id="fBrand"></select></div>
-      <div><label>Cari produk / no. order</label><input type="search" id="fQ" placeholder="mis. Sapphire, SHP1N…"></div>
+      <div class="dashonly"><label>Toko / Admin</label><select id="fAdmin"></select></div>
+      <div class="dashonly"><label>Kategori</label><select id="fCat"></select></div>
+      <div class="dashonly"><label>Brand</label><select id="fBrand"></select></div>
+      <div class="dashonly"><label>Cari produk / no. order</label><input type="search" id="fQ" placeholder="mis. Sapphire, SHP1N…"></div>
       <div><button id="btnReset" style="width:100%">Reset Filter</button></div>
       <div class="chips">
         <span class="sub">Hari Spesial:</span>
@@ -187,6 +201,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
 
   <div id="banner"></div>
 
+  <div id="viewDash">
   <section class="kpis" id="kpis"></section>
   <div class="cmp" id="cmpHint"></div>
 
@@ -261,6 +276,56 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
     </div>
   </section>
 
+  </div><!-- /viewDash -->
+
+  <div id="viewAdmin" class="hidden">
+    <div id="aCover"></div>
+    <section class="kpis" id="aKpis"></section>
+
+    <section class="card" style="margin:14px 0">
+      <div class="head"><div><h3>🏆 Peringkat &amp; KPI Admin</h3><div class="hint">1 nota = 1 nomor order unik per akun admin · klik baris untuk membuka profil admin</div></div></div>
+      <div class="scroll"><table class="tbl" id="aBoard"></table></div>
+    </section>
+
+    <section class="card" style="margin-bottom:14px">
+      <div class="head"><div><h3>Distribusi Nota per Marketplace</h3><div class="hint" id="aMatHint"></div></div>
+        <div class="seg" id="segMat"><button data-v="row" class="on">% per Admin (baris)</button><button data-v="col">% per Marketplace (kolom)</button></div></div>
+      <div class="scroll"><table class="tbl mat" id="aMat"></table></div>
+    </section>
+
+    <section class="grid g2">
+      <div class="card"><h3>Nota per Admin &amp; Marketplace</h3><div class="hint">Jumlah nota, ditumpuk per marketplace</div><div class="cv"><canvas id="cStack"></canvas></div></div>
+      <div class="card"><h3>Kontribusi Nota Tim</h3><div class="hint">Porsi nota tiap admin</div><div class="cv"><canvas id="cShare"></canvas></div></div>
+    </section>
+
+    <section class="card" id="aProfileCard" style="margin:14px 0">
+      <div class="head"><div><h3>👤 Profil Admin</h3><div class="hint" id="aHeadline"></div></div>
+        <select id="aPerson" class="mapin" style="width:auto;min-width:200px" aria-label="Pilih admin"></select></div>
+      <div class="kpis" id="pKpis" style="margin-top:12px"></div>
+      <div class="grid g2" style="margin-top:14px">
+        <div><div class="hint" style="margin-bottom:6px">Distribusi per marketplace</div><div class="scroll"><table class="tbl" id="aPlat"></table></div></div>
+        <div class="cv"><canvas id="cPPlat"></canvas></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div><div class="hint" style="margin-bottom:6px">Nota yang dicetak per waktu</div><div class="cv"><canvas id="cPTrend"></canvas></div></div>
+        <div><div class="hint" style="margin-bottom:6px">Akun yang dipegang</div><div class="scroll"><table class="tbl" id="aAcc"></table></div></div>
+      </div>
+    </section>
+
+    <section class="card editor" id="aMapSec" style="margin-bottom:14px">
+      <div class="head"><div><h3>⚙️ Penerjemah Nama Admin</h3><div class="hint">Isi nama orang untuk tiap akun admin. Satu orang boleh memegang banyak akun (mis. Vania = Admin Shopee 3 + Admin Tokopedia 1).</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="primary" id="mapSave">💾 Simpan</button><button id="mapReset">↺ Kembali ke bawaan</button></div></div>
+      <div class="scroll" style="max-height:440px;margin-top:10px"><table class="tbl" id="aMapTbl"></table></div>
+      <datalist id="personList"></datalist>
+      <div class="hint" id="mapMsg" style="margin-top:8px;font-weight:600"></div>
+      <details class="mapx"><summary>Isi cepat lewat teks &amp; bagikan ke seluruh tim</summary>
+        <textarea id="mapBulk" rows="6" placeholder="Admin Shopee = Inka&#10;Admin Shopee 3 = Vania&#10;Admin Tokopedia 2 = Amar"></textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"><button id="mapApply">Terapkan teks</button><button id="mapCopy">📋 Salin untuk Google Sheets</button><button id="mapCsv">⬇ Unduh CSV</button></div>
+        <div class="hint">Isian disimpan di browser ini saja. Agar sama di semua komputer tim: di Google Sheet buat tab bernama <code>admin_map</code>, lalu tempel hasil “Salin untuk Google Sheets” (kolom A = akun, kolom B = nama). Dashboard membacanya otomatis; isian di browser menimpa isi tab itu.</div>
+      </details>
+    </section>
+  </div><!-- /viewAdmin -->
+
   <footer>
     Sumber data: Google Sheets · <span id="rowInfo"></span><br>
     <span id="verify"></span>
@@ -290,6 +355,12 @@ const CONFIG = {
     iterations: 210000,
     hash: 'b2ad5521becdf3360b3ceab5726369c75cdaaf79c7b2a5dbd6ff966503301856'
   },
+  // Penerjemah akun admin → nama orang (nilai awal). Bisa diubah di halaman Admin Report, atau lewat tab 'admin_map' di Google Sheet (kolom A = akun, kolom B = nama).
+  ADMIN_TAB: 'admin_map',
+  ADMIN_MAP: [
+    ['Admin Shopee', 'Inka'], ['Admin Shopee 2', 'Irma'], ['Admin Shopee 3', 'Vania'], ['Admin Shopee 4', 'Pian'],
+    ['Admin Tokopedia 1', 'Vania'], ['Admin Tokopedia 2', 'Amar'], ['Admin Blibli', 'Irma']
+  ],
   AUTO_REFRESH_MIN: 10       // muat ulang data otomatis tiap N menit saat halaman terbuka (0 = nonaktif)
 };
 /* ===================================================== */
@@ -570,14 +641,74 @@ async function readWorkbookBytes(bytes, opt = {}){
   const sheets = parseWorkbookMeta(await entryText(bytes, need('xl/workbook.xml')), await entryText(bytes, need('xl/_rels/workbook.xml.rels')));
   const sstEnt = ents.get('xl/sharedStrings.xml');
   const sst = sstEnt ? parseSST(await entryText(bytes, sstEnt)) : [];
-  const tabs = [], ignored = [];
+  const tabs = [], ignored = []; let mapRows = null;
   for (const sh of sheets){
     if (opt.exclude && opt.exclude(sh.name)){ ignored.push({name: sh.name, why: 'dikecualikan'}); continue; }
+    if (opt.mapTab && sh.name.trim().toLowerCase() === opt.mapTab){
+      const ent = ents.get(sh.path), rows = [];
+      if (ent) await parseSheet(bytes, ent, sst, (ri, cells) => { rows.push(Array.from(cells, x => x == null ? '' : String(x).trim())); return true; });
+      mapRows = rows.filter(c => c[0] && c[1] && !/^(akun|account|admin|nama akun|first_name)$/i.test(c[0])).map(c => [c[0], c[1]]);
+      continue;
+    }
     if (opt.onTab) opt.onTab(sh.name);
     const r = await readSheetRecords(bytes, ents, sst, sh);
     if (r) tabs.push(r); else ignored.push({name: sh.name, why: 'kolom data tidak ditemukan'});
   }
-  return {tabs, ignored, sheetNames: sheets.map(s => s.name)};
+  return {tabs, ignored, mapRows, sheetNames: sheets.map(s => s.name)};
+}
+
+/* ---------- Admin Report: penerjemah akun admin → nama orang, hitung nota ---------- */
+const UNMAPPED = '(Belum dipetakan)';
+const normAcc = s => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/^admin\s+/, '');
+function parseMapText(text){
+  const out = [];
+  for (const line of String(text || '').split(/\r?\n/)){
+    const m = line.split(/\s*(?:=|\t|;|→|->|,)\s*/);
+    if (m.length < 2) continue;
+    const a = m[0].trim(), p = m.slice(1).join(' ').trim();
+    if (a && p) out.push([a, p]);
+  }
+  return out;
+}
+/* sumber berurutan: yang belakang menimpa yang depan; nama kosong = hapus */
+function buildMap(...sources){
+  const m = new Map();
+  sources.forEach((src, si) => {
+    for (const [a, p] of src || []){
+      const k = normAcc(a); if (!k) continue;
+      const v = String(p ?? '').trim();
+      if (v) m.set(k, {acc: String(a).trim(), person: v, src: si}); else m.delete(k);
+    }
+  });
+  return m;
+}
+const personOf = (acc, map) => { const e = map.get(normAcc(acc)); return e ? e.person : UNMAPPED; };
+/* 1 nota = 1 kombinasi (akun admin, reference_no) */
+function buildNotas(rows){
+  const m = new Map();
+  for (const r of rows){
+    const ref = r.ref || ('x' + r.ts), key = r.admin + '\u0001' + ref;
+    let n = m.get(key);
+    if (!n){ n = {acc: r.admin, plat: r.plat, ref, day: r.day, hour: r.hour, total: 0, units: 0}; m.set(key, n); }
+    n.total += r.total; n.units += r.units;
+  }
+  return [...m.values()];
+}
+function adminStats(notas, map){
+  const P = new Map(), plats = new Map();
+  let totalN = 0, totalO = 0, unN = 0;
+  const bump = (mm, k, n) => { let o = mm.get(k); if (!o){ o = {notas: 0, omzet: 0}; mm.set(k, o); } o.notas++; o.omzet += n.total; };
+  for (const n of notas){
+    const name = personOf(n.acc, map);
+    let p = P.get(name);
+    if (!p){ p = {name, notas: 0, omzet: 0, units: 0, byPlat: new Map(), byAcc: new Map(), days: new Set()}; P.set(name, p); }
+    p.notas++; p.omzet += n.total; p.units += n.units; p.days.add(n.day);
+    bump(p.byPlat, n.plat, n); bump(p.byAcc, n.acc + '\u0001' + n.plat, n); bump(plats, n.plat, n);
+    totalN++; totalO += n.total; if (name === UNMAPPED) unN++;
+  }
+  const persons = [...P.values()].sort((a, b) => (a.name === UNMAPPED) - (b.name === UNMAPPED) || b.notas - a.notas || b.omzet - a.omzet);
+  const platList = [...plats.entries()].map(([k, v]) => ({plat: k, notas: v.notas, omzet: v.omzet})).sort((a, b) => b.notas - a.notas);
+  return {persons, plats: platList, totalN, totalO, unN, coverage: totalN ? 1 - unN / totalN : 1};
 }
 /*CORE-END*/
 
@@ -622,7 +753,7 @@ const S = {
   p:{mode:'month', day:'', week:'', month:'', year:''},
   f:{plat:'', admin:'', cat:'', brand:'', q:'', pack:true, event:'all'},
   trendGroup:'day', trendMetric:'total', topBy:'total',
-  page:1, perPage:25, sort:{k:'ts', dir:-1}, view:[], diag:null
+  route:'dash', page:1, perPage:25, sort:{k:'ts', dir:-1}, view:[], diag:null
 };
 
 function matches(r, rng, skipEvent){
@@ -913,7 +1044,8 @@ function renderDetail(rows){
   $('#pgPrev').disabled = S.page <= 1; $('#pgNext').disabled = S.page >= pages;
 }
 
-function render(){
+function render(){ if (S.route === 'admin') renderAdminPage(); else renderDash(); }
+function renderDash(){
   const rng = curRange(), prng = prevRange(S.p, rng, S.maxDay);
   const rows = S.all.filter(r => matches(r, rng, false));
   const prev = prng ? S.all.filter(r => matches(r, prng, false)) : null;
@@ -924,6 +1056,237 @@ function render(){
   renderEvents(evRows);
   hbar('cCat', rows, r => r.cat); hbar('cBrand', rows, r => r.brand, r => r.brand !== 'Others' && r.cat !== PACK);
   renderHour(rows); renderDow(rows); renderAdmin(rows); renderTop(rows); renderDetail(rows);
+}
+
+
+/* ---------- Admin Report (halaman terpisah) ---------- */
+const LS_MAP = 'adm_map_v1';
+const A = {mat:'row', person:'', map:new Map(), sheet:[], local:[], st:null, notas:[], allNotas:[]};
+const SRC_LABEL = ['Bawaan', 'Google Sheet', 'Disimpan di browser'];
+function loadLocalMap(){
+  try { const v = JSON.parse(localStorage.getItem(LS_MAP) || '[]'); A.local = Array.isArray(v) ? v.filter(x => Array.isArray(x) && x.length >= 2) : []; } catch(e){ A.local = []; }
+}
+function rebuildMap(){ A.map = buildMap(CONFIG.ADMIN_MAP, A.sheet, A.local); }
+function matchesA(r, rng){
+  const f = S.f;
+  if (rng && (r.day < rng.from || r.day > rng.to)) return false;
+  if (f.plat && r.plat !== f.plat) return false;
+  if (!f.pack && r.cat === PACK) return false;
+  if (f.event === 'twin' && !r.tw) return false;
+  if (f.event === 'peak' && !r.pk) return false;
+  return true;
+}
+const pct = (a, b, d = 1) => b ? (a / b * 100).toLocaleString('id-ID', {minimumFractionDigits:d, maximumFractionDigits:d}) + '%' : '—';
+const accName = k => k.split('\u0001')[0], accPlat = k => k.split('\u0001')[1];
+const dlt = (c, p) => p > 0 ? `<span class="${c >= p ? 'up' : 'dn'}">${c >= p ? '▲' : '▼'} ${Math.abs((c / p - 1) * 100).toFixed(0)}%</span>` : '<span class="sub">—</span>';
+const realPersons = st => st.persons.filter(p => p.name !== UNMAPPED);
+
+function renderAdminPage(){
+  const rng = curRange(), prng = prevRange(S.p, rng, S.maxDay);
+  const notas = buildNotas(S.all.filter(r => matchesA(r, rng)));
+  const st = adminStats(notas, A.map);
+  const pst = prng ? adminStats(buildNotas(S.all.filter(r => matchesA(r, prng))), A.map) : null;
+  A.st = st; A.notas = notas;
+  const evName = {twin:' · Tanggal Kembar', peak:' · Peak Day (tgl 25)'}[S.f.event] || '';
+  $('#plabel').textContent = periodTitle() + evName + (S.f.plat ? ' · ' + S.f.plat : '');
+  aCover(notas, st); aKpis(st, pst, prng); aBoard(st, pst); aMatrix(st); aCharts(st); aProfile(st, notas);
+}
+function aCover(notas, st){
+  if (!st.unN){ $('#aCover').innerHTML = ''; return; }
+  const m = new Map();
+  for (const n of notas) if (personOf(n.acc, A.map) === UNMAPPED) m.set(n.acc, (m.get(n.acc) || 0) + 1);
+  const list = [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `<b>${esc(k)}</b> (${fmtInt(v)})`).join(', ');
+  $('#aCover').innerHTML = `<div class="banner"><b>⚠ ${fmtInt(st.unN)} nota (${pct(st.unN, st.totalN)}) berasal dari akun yang belum dipetakan ke nama orang:</b> ${list}. Isi namanya di bagian <a href="#aMapSec" id="goMap">Penerjemah Nama Admin</a> di bawah.</div>`;
+}
+function aKpis(st, pst, prng){
+  const rp = realPersons(st), top = rp[0];
+  const pv = pst ? ` · <span class="sub">vs periode lalu</span> ` : '';
+  const cards = [
+    ['Total Nota', fmtInt(st.totalN), 'nota unik (akun + no. order)', pst ? dlt(st.totalN, pst.totalN) : ''],
+    ['Total Omzet', fmtC(st.totalO), fmtRp(st.totalO), pst ? dlt(st.totalO, pst.totalO) : ''],
+    ['Admin Aktif', fmtInt(rp.length), 'orang yang mencetak nota', pst ? dlt(rp.length, realPersons(pst).length) : ''],
+    ['Rata-rata Nota / Admin', rp.length ? fmtInt(rp.reduce((s, p) => s + p.notas, 0) / rp.length) : '—', 'nota per orang pada periode ini', ''],
+    ['Admin Teratas', top ? esc(top.name) : '—', top ? `${fmtInt(top.notas)} nota · ${pct(top.notas, st.totalN)} dari semua nota` : '', ''],
+    ['Akun Terpetakan', pct(st.totalN - st.unN, st.totalN, 0), st.unN ? `${fmtInt(st.unN)} nota belum dipetakan` : 'semua nota sudah punya nama', '']
+  ];
+  $('#aKpis').innerHTML = cards.map(c => `<div class="card kpi"><div class="l">${c[0]}</div><div class="v">${c[1]}</div><div class="s">${esc(c[2])} ${c[3]}</div></div>`).join('');
+  fillLast($('#aKpis'));
+}
+function aBoard(st, pst){
+  const prevBy = new Map((pst ? pst.persons : []).map(p => [p.name, p]));
+  const max = Math.max(1, ...st.persons.map(p => p.notas));
+  const rows = st.persons.map((p, i) => {
+    const accs = [...new Set([...p.byAcc.keys()].map(accName))].join(', ');
+    const pp = prevBy.get(p.name);
+    const un = p.name === UNMAPPED;
+    return `<tr data-person="${esc(p.name)}" class="clk${un ? ' mut' : ''}"><td>${un ? '' : `<span class="rank">${i + 1}</span>`}</td><td><b>${esc(p.name)}</b></td><td class="trunc" title="${esc(accs)}">${esc(accs)}</td>
+      <td class="r"><b>${fmtInt(p.notas)}</b></td><td class="r">${pct(p.notas, st.totalN)}</td><td class="r">${fmtC(p.omzet)}</td><td class="r">${pct(p.omzet, st.totalO)}</td>
+      <td class="r">${fmtInt(p.days.size)}</td><td class="r">${(p.notas / p.days.size).toLocaleString('id-ID', {maximumFractionDigits:1})}</td><td class="r">${fmtC(p.omzet / p.notas)}</td>
+      <td class="r">${pst ? dlt(p.notas, pp ? pp.notas : 0) : '<span class="sub">—</span>'}</td>
+      <td><div class="bar"><span style="width:${p.notas / max * 100}%"></span></div></td></tr>`;
+  });
+  $('#aBoard').innerHTML = `<thead><tr><th>#</th><th>Admin</th><th>Akun</th><th class="r">Nota</th><th class="r">% Nota</th><th class="r">Omzet</th><th class="r">% Omzet</th><th class="r">Hari aktif</th><th class="r">Nota / hari</th><th class="r">Rata² / nota</th><th class="r">Nota vs periode lalu</th><th>Kontribusi</th></tr></thead><tbody>` +
+    (rows.length ? rows.join('') : '<tr><td colspan="12" class="sub">Tidak ada nota pada periode ini.</td></tr>') + '</tbody>' +
+    (rows.length ? `<tfoot><tr><td></td><td><b>Total tim</b></td><td></td><td class="r"><b>${fmtInt(st.totalN)}</b></td><td class="r">100%</td><td class="r"><b>${fmtC(st.totalO)}</b></td><td class="r">100%</td><td></td><td></td><td class="r">${fmtC(st.totalN ? st.totalO / st.totalN : 0)}</td><td></td><td></td></tr></tfoot>` : '');
+}
+function aMatrix(st){
+  const row = A.mat === 'row';
+  $('#aMatHint').textContent = row
+    ? 'Setiap baris = 100% nota admin itu (mis. berapa % nota Vania ada di Tokopedia vs Shopee). Kolom paling kanan = porsi admin itu dari SELURUH nota tim.'
+    : 'Setiap kolom = 100% nota marketplace itu (siapa saja yang mencetaknya). Kolom paling kanan = porsi admin itu dari SELURUH nota tim.';
+  const pl = st.plats;
+  const head = `<thead><tr><th>Admin</th>${pl.map(p => `<th class="r"><span class="ptag" style="--c:${platColor(p.plat)}">${esc(p.plat)}</span></th>`).join('')}<th class="r">Total semua marketplace</th></tr></thead>`;
+  const body = st.persons.map(p => {
+    const cells = pl.map(pp => {
+      const c = p.byPlat.get(pp.plat);
+      if (!c) return '<td class="r sub">–</td>';
+      const f = row ? c.notas / p.notas : c.notas / pp.notas;
+      return `<td class="r" style="background:color-mix(in srgb,${platColor(pp.plat)} ${Math.round(f * 40)}%,transparent)"><b>${fmtInt(c.notas)}</b> <span class="sub">${pct(c.notas, row ? p.notas : pp.notas)}</span></td>`;
+    }).join('');
+    return `<tr class="${p.name === UNMAPPED ? 'mut' : ''}"><td><b>${esc(p.name)}</b></td>${cells}<td class="r"><b>${fmtInt(p.notas)}</b> <span class="sub">${pct(p.notas, st.totalN)}</span></td></tr>`;
+  }).join('');
+  const foot = `<tfoot><tr><td><b>Total tim</b></td>${pl.map(pp => `<td class="r"><b>${fmtInt(pp.notas)}</b> <span class="sub">${pct(pp.notas, st.totalN)}</span></td>`).join('')}<td class="r"><b>${fmtInt(st.totalN)}</b> <span class="sub">100%</span></td></tr></tfoot>`;
+  $('#aMat').innerHTML = st.persons.length ? head + `<tbody>${body}</tbody>` + foot : '<tbody><tr><td class="sub">Tidak ada nota pada periode ini.</td></tr></tbody>';
+}
+function aCharts(st){
+  const ps = st.persons, labels = ps.map(p => p.name);
+  mk('cStack', {type:'bar', data:{labels, datasets: st.plats.map(pl => ({label:pl.plat, data:ps.map(p => (p.byPlat.get(pl.plat) || {notas:0}).notas), backgroundColor:platColor(pl.plat), borderRadius:3}))},
+    options:{plugins:{legend:{position:'bottom'}}, scales:{x:{stacked:true, grid:{display:false}}, y:{stacked:true, beginAtZero:true, ticks:{precision:0}}}}});
+  mk('cShare', {type:'doughnut', data:{labels, datasets:[{data:ps.map(p => p.notas), backgroundColor:ps.map((p, i) => p.name === UNMAPPED ? '#9CA3AF' : PALETTE[i % PALETTE.length]), borderWidth:0}]},
+    options:{cutout:'62%', plugins:{legend:{position:'bottom'}, tooltip:{callbacks:{label:c => ` ${c.label}: ${fmtInt(c.parsed)} nota (${pct(c.parsed, st.totalN)})`}}}}});
+}
+function trendBuckets(list, rng){
+  const m = S.p.mode, g = m === 'day' ? 'hour' : (m === 'all' || m === 'year') ? 'month' : 'day';
+  const cnt = new Map();
+  for (const n of list){ const k = g === 'hour' ? n.hour : g === 'month' ? n.day.slice(0, 7) : n.day; cnt.set(k, (cnt.get(k) || 0) + 1); }
+  let keys;
+  if (g === 'hour') keys = [...Array(24).keys()];
+  else if (g === 'day' && rng){ keys = []; for (let d = rng.from; d <= rng.to && keys.length < 400; d = addDaysStr(d, 1)) keys.push(d); }
+  else keys = [...cnt.keys()].sort();
+  const lab = k => g === 'hour' ? pad(k) + ':00' : g === 'month' ? monthLabel(k) : fmtDay(k, {day:'2-digit', month:'short'});
+  return {labels:keys.map(lab), data:keys.map(k => cnt.get(k) || 0)};
+}
+function aProfile(st, notas){
+  const rp = st.persons;
+  const sel = $('#aPerson');
+  if (!rp.some(p => p.name === A.person)) A.person = (realPersons(st)[0] || rp[0] || {name:''}).name;
+  sel.innerHTML = rp.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+  sel.value = A.person;
+  const p = rp.find(x => x.name === A.person);
+  if (!p){
+    $('#aHeadline').textContent = 'Tidak ada nota pada periode ini.';
+    ['#pKpis', '#aPlat', '#aAcc'].forEach(i => { $(i).innerHTML = ''; });
+    mk('cPPlat', {type:'doughnut', data:{labels:[], datasets:[{data:[]}]}}); mk('cPTrend', {type:'bar', data:{labels:[], datasets:[{data:[]}]}});
+    return;
+  }
+  const rank = realPersons(st).findIndex(x => x.name === p.name) + 1;
+  const plats = [...p.byPlat.entries()].sort((a, b) => b[1].notas - a[1].notas);
+  $('#aHeadline').innerHTML = `<b>${esc(p.name)}</b> mencetak <b>${fmtInt(p.notas)}</b> nota` + (plats.length ? ': ' + plats.map(([k, v]) => `${pct(v.notas, p.notas)} ${esc(k)}`).join(' · ') : '') + ` — <b>${pct(p.notas, st.totalN)}</b> dari seluruh nota tim.`;
+  const cards = [
+    ['Total Nota', fmtInt(p.notas), `${pct(p.notas, st.totalN)} dari semua nota`, ''],
+    ['Omzet', fmtC(p.omzet), `${pct(p.omzet, st.totalO)} dari total omzet`, ''],
+    ['Peringkat', p.name === UNMAPPED ? '—' : '#' + rank, p.name === UNMAPPED ? '' : `dari ${realPersons(st).length} admin`, ''],
+    ['Hari Aktif', fmtInt(p.days.size), 'hari ada nota', ''],
+    ['Nota / Hari Aktif', (p.notas / p.days.size).toLocaleString('id-ID', {maximumFractionDigits:1}), 'rata-rata', ''],
+    ['Rata² Nilai Nota', fmtC(p.omzet / p.notas), 'omzet ÷ nota', '']
+  ];
+  $('#pKpis').innerHTML = cards.map(c => `<div class="card kpi"><div class="l">${c[0]}</div><div class="v">${c[1]}</div><div class="s">${esc(c[2])}</div></div>`).join('');
+  fillLast($('#pKpis'));
+  const ptot = new Map(st.plats.map(x => [x.plat, x]));
+  $('#aPlat').innerHTML = `<thead><tr><th>Marketplace</th><th class="r">Nota</th><th class="r">% dari nota ${esc(p.name)}</th><th class="r">% dari seluruh nota marketplace</th><th class="r">Omzet</th></tr></thead><tbody>` +
+    plats.map(([k, v]) => `<tr><td><span class="ptag" style="--c:${platColor(k)}">${esc(k)}</span></td><td class="r"><b>${fmtInt(v.notas)}</b></td><td class="r">${pct(v.notas, p.notas)}</td><td class="r">${pct(v.notas, ptot.get(k).notas)}</td><td class="r">${fmtC(v.omzet)}</td></tr>`).join('') +
+    `</tbody><tfoot><tr><td><b>Semua marketplace</b></td><td class="r"><b>${fmtInt(p.notas)}</b></td><td class="r">100%</td><td class="r"><b>${pct(p.notas, st.totalN)}</b></td><td class="r"><b>${fmtC(p.omzet)}</b></td></tr></tfoot>`;
+  mk('cPPlat', {type:'doughnut', data:{labels:plats.map(x => x[0]), datasets:[{data:plats.map(x => x[1].notas), backgroundColor:plats.map(x => platColor(x[0])), borderWidth:0}]},
+    options:{cutout:'62%', plugins:{legend:{position:'bottom'}, tooltip:{callbacks:{label:c => ` ${c.label}: ${fmtInt(c.parsed)} nota (${pct(c.parsed, p.notas)})`}}}}});
+  const mine = notas.filter(n => personOf(n.acc, A.map) === p.name);
+  const tb = trendBuckets(mine, curRange());
+  mk('cPTrend', {type:'bar', data:{labels:tb.labels, datasets:[{label:'Nota', data:tb.data, backgroundColor:'#4f46e5', borderRadius:4}]},
+    options:{plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}}, y:{beginAtZero:true, ticks:{precision:0}}}}});
+  const accs = [...p.byAcc.entries()].sort((a, b) => b[1].notas - a[1].notas);
+  $('#aAcc').innerHTML = `<thead><tr><th>Akun</th><th>Marketplace</th><th class="r">Nota</th><th class="r">Omzet</th></tr></thead><tbody>` +
+    accs.map(([k, v]) => `<tr><td>${esc(accName(k))}</td><td><span class="ptag" style="--c:${platColor(accPlat(k))}">${esc(accPlat(k))}</span></td><td class="r">${fmtInt(v.notas)}</td><td class="r">${fmtC(v.omzet)}</td></tr>`).join('') + '</tbody>';
+}
+
+/* --- editor penerjemah nama admin --- */
+function aEditor(){
+  const tbl = $('#aMapTbl'); if (!tbl) return;
+  const seen = new Map();
+  for (const n of A.allNotas){
+    const k = normAcc(n.acc); let o = seen.get(k);
+    if (!o){ o = {names:new Map(), plats:new Map(), notas:0}; seen.set(k, o); }
+    o.notas++; o.names.set(n.acc, (o.names.get(n.acc) || 0) + 1); o.plats.set(n.plat, (o.plats.get(n.plat) || 0) + 1);
+  }
+  const top = m => [...m.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  const list = [];
+  for (const [k, o] of seen) list.push({k, acc:top(o.names), plat:top(o.plats), notas:o.notas});
+  for (const [k, e] of A.map) if (!seen.has(k)) list.push({k, acc:e.acc, plat:'', notas:0});
+  list.sort((a, b) => (a.plat || '~').localeCompare(b.plat || '~') || a.acc.localeCompare(b.acc, 'id', {numeric:true}));
+  tbl.innerHTML = `<thead><tr><th>Akun admin (di data)</th><th>Marketplace</th><th class="r">Nota (semua periode)</th><th>Nama orang</th><th>Sumber</th></tr></thead><tbody>` +
+    list.map(x => { const e = A.map.get(x.k); return `<tr data-acc="${esc(x.acc)}"><td><b>${esc(x.acc)}</b></td><td>${x.plat ? `<span class="ptag" style="--c:${platColor(x.plat)}">${esc(x.plat)}</span>` : ''}</td><td class="r">${fmtInt(x.notas)}</td>
+      <td><input class="mapin" list="personList" value="${esc(e ? e.person : '')}" placeholder="isi nama…" maxlength="40"></td><td class="sub">${e ? SRC_LABEL[e.src] : '<span class="dn">belum dipetakan</span>'}</td></tr>`; }).join('') + '</tbody>';
+  $('#personList').innerHTML = [...new Set([...A.map.values()].map(e => e.person))].sort().map(v => `<option value="${esc(v)}">`).join('');
+}
+function collectOverrides(){
+  const base = buildMap(CONFIG.ADMIN_MAP, A.sheet), out = [];
+  $$('#aMapTbl tbody tr').forEach(tr => {
+    const acc = tr.dataset.acc, val = tr.querySelector('input').value.trim();
+    const b = base.get(normAcc(acc));
+    if (val !== (b ? b.person : '')) out.push([acc, val]);
+  });
+  return out;
+}
+function persistLocal(){
+  let ok = true;
+  try { if (A.local.length) localStorage.setItem(LS_MAP, JSON.stringify(A.local)); else localStorage.removeItem(LS_MAP); } catch(e){ ok = false; }
+  return ok;
+}
+function mapMsg(t, bad){ const el = $('#mapMsg'); el.textContent = t; el.style.color = bad ? 'var(--red)' : 'var(--green)'; }
+function afterMapChange(msg){
+  rebuildMap(); const ok = persistLocal();
+  render(); aEditor();
+  mapMsg(ok ? msg : 'Diterapkan, tetapi browser tidak mengizinkan penyimpanan (mode privat?). Nama akan hilang saat halaman ditutup.', !ok);
+}
+function currentMapPairs(){
+  const tmp = buildMap(CONFIG.ADMIN_MAP, A.sheet, collectOverrides());
+  return [...tmp.values()].sort((a, b) => a.acc.localeCompare(b.acc, 'id', {numeric:true})).map(e => [e.acc, e.person]);
+}
+function mapSave(){ A.local = collectOverrides(); afterMapChange('✓ Tersimpan di browser ini.'); }
+function mapReset(){ if (!confirm('Hapus semua perubahan lokal dan kembali ke nama bawaan + tab admin_map di Google Sheet?')) return; A.local = []; afterMapChange('✓ Dikembalikan ke bawaan.'); }
+function mapApply(){
+  const pairs = parseMapText($('#mapBulk').value);
+  if (!pairs.length){ mapMsg('Tidak ada baris yang terbaca. Format: Admin Shopee = Inka (satu per baris).', true); return; }
+  A.local = collectOverrides().concat(pairs);
+  afterMapChange(`✓ ${pairs.length} nama diterapkan dan disimpan.`);
+}
+async function mapCopy(){
+  const tsv = 'akun\tnama\n' + currentMapPairs().map(p => p.join('\t')).join('\n');
+  try { await navigator.clipboard.writeText(tsv); mapMsg('✓ Disalin. Tempel di sel A1 pada tab admin_map di Google Sheet.'); }
+  catch(e){ $('#mapBulk').value = tsv; $('#mapBulk').select(); mapMsg('Salin manual: teks sudah dipilih di kotak teks (Ctrl+C).', true); }
+}
+function download(name, text){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + text], {type:'text/csv;charset=utf-8'}));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function mapCsv(){ download(`admin_map_${ymd(new Date())}.csv`, Papa.unparse([['akun', 'nama'], ...currentMapPairs()])); }
+function exportAdminCsv(){
+  const st = A.st; if (!st || !st.persons.length) return;
+  const ptot = new Map(st.plats.map(x => [x.plat, x.notas])), out = [];
+  for (const p of st.persons) for (const [k, v] of p.byPlat)
+    out.push({Admin:p.name, Marketplace:k, Nota:v.notas, Omzet:v.omzet, Persen_dari_nota_admin:+(v.notas / p.notas * 100).toFixed(2), Persen_dari_nota_marketplace:+(v.notas / ptot.get(k) * 100).toFixed(2), Persen_dari_semua_nota:+(v.notas / st.totalN * 100).toFixed(2)});
+  download(`admin_report_${ymd(new Date())}.csv`, Papa.unparse(out));
+}
+
+/* --- routing dua halaman --- */
+const routeFromHash = () => location.hash === '#admin' ? 'admin' : 'dash';
+function setRoute(r, noRender){
+  S.route = r;
+  $('#viewDash').classList.toggle('hidden', r !== 'dash'); $('#viewAdmin').classList.toggle('hidden', r !== 'admin');
+  $$('.dashonly').forEach(e => e.classList.toggle('hidden', r !== 'dash'));
+  $('#navDash').classList.toggle('on', r === 'dash'); $('#navAdmin').classList.toggle('on', r === 'admin');
+  $('#btnExport').textContent = r === 'admin' ? '⬇ Ekspor CSV Admin' : '⬇ Ekspor CSV';
+  $('#ttl').textContent = r === 'admin' ? 'Admin Report' : CONFIG.TITLE;
+  document.title = r === 'admin' ? 'Admin Report · ' + CONFIG.TITLE : CONFIG.TITLE;
+  if (!noRender && S.all.length){ render(); if (r === 'admin') aEditor(); }
 }
 
 /* ---------- filter UI ---------- */
@@ -993,9 +1356,9 @@ async function getViaXlsx(){
   if (typeof DecompressionStream === 'undefined') throw new Error('browser ini belum mendukung DecompressionStream');
   const bytes = await fetchBytes(`${sheetBase()}/export?format=xlsx`, n => setStatus(`Mengunduh seluruh tab… ${(n / 1048576).toFixed(1)} MB`));
   setStatus('Membaca isi tab…');
-  const res = await readWorkbookBytes(bytes, {exclude:isExcluded, onTab:n => setStatus(`Membaca tab ${n}…`)});
+  const res = await readWorkbookBytes(bytes, {exclude:isExcluded, mapTab:CONFIG.ADMIN_TAB, onTab:n => setStatus(`Membaca tab ${n}…`)});
   if (!res.tabs.length) throw new Error('tidak ada tab dengan kolom date, Total, dan reference_no di file XLSX');
-  return {src:'xlsx', tabs:res.tabs, ignored:res.ignored};
+  return {src:'xlsx', tabs:res.tabs, ignored:res.ignored, mapRows:res.mapRows};
 }
 
 /* pembanding/penemu tab lewat Google Sheets sendiri (query ringan: jumlah baris & jumlah kolom Total) */
@@ -1093,13 +1456,14 @@ async function load(silent){
     }
     if (!rows.length) throw new Error('Tidak ada baris data yang valid. Pastikan header kolom sesuai (date, product_name, Total, dst.).');
     S.all = rows;
+    A.sheet = res.mapRows || []; rebuildMap(); A.allNotas = buildNotas(rows);
     const diag = S.diag = {src:res.src, tabs:per, ignored:res.ignored || [], fallbackReason:res.fallbackReason};
     let mn = rows[0].day, mx = rows[0].day;
     for (const r of rows){ if (r.day < mn) mn = r.day; if (r.day > mx) mx = r.day; }
     S.minDay = mn; S.maxDay = mx;
     const first = !S.loadedOnce; S.loadedOnce = true; S.lastLoad = Date.now();
     initFilters(); initPeriod(); if (first) autoGroup();
-    render();
+    render(); aEditor();
     $('#updated').textContent = `Data ${fmtDay(mn)} – ${fmtDay(mx)} · diperbarui ${new Date().toLocaleString('id-ID', {dateStyle:'medium', timeStyle:'short'})}`;
     $('#rowInfo').textContent = `${fmtInt(rows.length)} baris dari ${per.length} tab (${per.map(t => t.name).join(', ')}) · sumber: ${res.src === 'xlsx' ? 'unduhan lengkap semua tab' : 'jalur cadangan'}`;
     showDiag(null);
@@ -1185,7 +1549,7 @@ function bind(){
   let t; $('#fQ').addEventListener('input', () => { clearTimeout(t); t = setTimeout(syncFromUI, 250); });
   $('#btnReset').addEventListener('click', resetAll);
   $('#btnRefresh').addEventListener('click', () => load(false));
-  $('#btnExport').addEventListener('click', exportCsv);
+  $('#btnExport').addEventListener('click', () => S.route === 'admin' ? exportAdminCsv() : exportCsv());
   $('#btnPrint').addEventListener('click', () => window.print());
   $('#btnTheme').addEventListener('click', () => setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
   $('#pPrev').addEventListener('click', () => stepPeriod(-1));
@@ -1194,6 +1558,13 @@ function bind(){
     const b = e.target.closest('button'); if (!b) return;
     $$(id + ' button').forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset.v);
   });
+  seg('#segMat', 'mat', v => { A.mat = v; render(); });
+  $('#aPerson').addEventListener('change', () => { A.person = $('#aPerson').value; render(); });
+  $('#aBoard').addEventListener('click', e => { const tr = e.target.closest('tr[data-person]'); if (!tr) return; A.person = tr.dataset.person; render(); $('#aProfileCard').scrollIntoView({behavior:'smooth', block:'start'}); });
+  $('#aCover').addEventListener('click', e => { if (e.target.id === 'goMap'){ e.preventDefault(); $('#aMapSec').scrollIntoView({behavior:'smooth'}); } });
+  $('#mapSave').addEventListener('click', mapSave); $('#mapReset').addEventListener('click', mapReset);
+  $('#mapApply').addEventListener('click', mapApply); $('#mapCopy').addEventListener('click', mapCopy); $('#mapCsv').addEventListener('click', mapCsv);
+  window.addEventListener('hashchange', () => setRoute(routeFromHash()));
   seg('#segEvent', 'event', v => { S.f.event = v; S.page = 1; render(); });
   seg('#segMetric', 'trendMetric', v => { S.trendMetric = v; render(); });
   seg('#segGroup', 'trendGroup', v => { S.trendGroup = v; render(); });
@@ -1203,7 +1574,7 @@ function bind(){
     const k = th.dataset.k; S.sort = {k, dir: S.sort.k === k ? -S.sort.dir : (k === 'ts' || ['qty','price','fee','total'].includes(k) ? -1 : 1)};
     render();
   });
-  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { fillLast($('#kpis')); fillLast($('#insights')); }, 150); });
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (S.route === 'admin'){ fillLast($('#aKpis')); fillLast($('#pKpis')); } else { fillLast($('#kpis')); fillLast($('#insights')); } }, 150); });
   $('#pgPrev').addEventListener('click', () => { S.page--; render(); });
   $('#pgNext').addEventListener('click', () => { S.page++; render(); });
 }
@@ -1211,7 +1582,7 @@ function bind(){
 (async function main(){
   document.title = CONFIG.TITLE; $('#ttl').textContent = CONFIG.TITLE;
   try { const t = localStorage.getItem('dash_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(e){}
-  bind();
+  loadLocalMap(); rebuildMap(); bind(); setRoute(routeFromHash(), true);
   $('#btnLogout').addEventListener('click', logout);
   await gate();
   if (authOn()) $('#btnLogout').classList.remove('hidden');
