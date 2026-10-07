@@ -197,7 +197,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
     </div>
   </header>
 
-  <nav class="nav"><a href="#dash" id="navDash" class="on">📊 Dashboard Penjualan</a><a href="#admin" id="navAdmin">🧑‍💼 Admin Report</a><a href="#ai" id="navAI">🤖 Asisten AI</a></nav>
+  <nav class="nav"><a href="#dash" id="navDash" class="on">📊 Dashboard Penjualan</a><a href="#admin" id="navAdmin">🧑‍💼 Admin Report</a><a href="#ai" id="navAI">🤖 Asisten Data</a></nav>
 
   <section class="filters" id="filtersBar">
     <div class="fbar">
@@ -358,9 +358,10 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
 
   <div id="viewAI" class="hidden">
     <section class="card" style="margin-bottom:14px">
-      <div class="head"><div><h3>🤖 Asisten AI — Analis Penjualan &amp; Strategi Pemasaran</h3><div class="hint" id="aiStatus"></div></div>
+      <div class="head"><div><h3>🤖 Asisten Data — Tanya Jawab Penjualan &amp; Strategi</h3><div class="hint" id="aiStatus"></div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="aiKeyBtn">⚙️ Pengaturan</button><button id="aiClear">🗑 Percakapan baru</button></div></div>
       <div id="aiSettings" class="hidden aiset">
+        <div class="hint" style="margin-bottom:8px"><b>Opsional.</b> Asisten sudah berfungsi gratis tanpa pengaturan apa pun. Isi key di bawah hanya jika Anda ingin AI eksternal (Anthropic) yang bisa menjawab pertanyaan bebas; ini berbayar per pemakaian oleh akun API Anda.</div>
         <label>API key Anthropic</label>
         <input type="password" id="aiKey" class="mapin" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
         <div class="hint" id="aiKeyHint"></div>
@@ -374,7 +375,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
     <section class="card aichat">
       <div class="aimsgs" id="aiMsgs" aria-live="polite"></div>
       <div class="aichips" id="aiChips"></div>
-      <form id="aiForm" class="aiform"><textarea id="aiQ" rows="2" placeholder="Tanyakan sesuatu tentang penjualan atau strategi… (Enter = kirim, Shift+Enter = baris baru)"></textarea><button class="primary" id="aiSend" type="submit">Kirim ➤</button></form>
+      <form id="aiForm" class="aiform"><textarea id="aiQ" rows="2" placeholder="Tanyakan sesuatu tentang penjualan…  (Enter = kirim, Shift+Enter = baris baru)"></textarea><button class="primary" id="aiSend" type="submit">Kirim ➤</button></form>
     </section>
   </div><!-- /viewAI -->
 
@@ -798,6 +799,7 @@ function runQuery(rows, spec, ctx){
   const f = spec.filters || {};
   const lc = a => (Array.isArray(a) ? a : a != null && a !== '' ? [a] : []).map(x => String(x).toLowerCase().trim());
   const fPlat = lc(f.platform), fAdmin = lc(f.admin), fPerson = lc(f.person), fCat = lc(f.category), fBrand = lc(f.brand), fWd = lc(f.weekday);
+  const fDom = (Array.isArray(f.day_of_month) ? f.day_of_month : f.day_of_month ? [f.day_of_month] : []).map(Number);
   const prod = f.product_contains ? String(f.product_contains).toLowerCase() : '';
   const sd = f.special_day ? String(f.special_day).toLowerCase() : '';
   const pf = ctx.personOf || (x => x);
@@ -822,6 +824,7 @@ function runQuery(rows, spec, ctx){
     if (fCat.length && !fCat.includes(r.cat.toLowerCase())) continue;
     if (fBrand.length && !fBrand.includes(r.brand.toLowerCase())) continue;
     if (fWd.length && !fWd.includes(HARI_Q[r.dow].toLowerCase())) continue;
+    if (fDom.length && !fDom.includes(r.dom)) continue;
     if (prod && !r.name.toLowerCase().includes(prod)) continue;
     if (f.include_packing === false && r.cat === 'Biaya Lain') continue;
     if (sd === 'twin' || sd === 'tanggal kembar'){ if (!r.tw) continue; }
@@ -864,6 +867,149 @@ function dataOverview(rows, ctx){
   return {baris_item: rows.length, tanggal_awal: mn, tanggal_akhir: mx, total_omzet: Math.round(tot), penjualan_produk: Math.round(gross), total_fee: Math.round(fee), jumlah_order: ord.size,
     tab_data: [...tabs], bulan_tersedia: [...months].sort(), platform: top(r => r.plat, 20), orang_admin: [...new Set(rows.map(r => pf(r.admin)))].sort(), akun_admin: top(r => r.admin, 40),
     kategori_teratas: top(r => r.cat, 15), brand_teratas: top(r => r.brand, 15)};
+}
+
+/* ---------- Pemahaman pertanyaan bahasa Indonesia (tanpa AI eksternal, tanpa biaya) ---------- */
+const NLU_MON = 'januari|february|februari|pebruari|maret|march|april|mei|may|juni|june|juli|july|agustus|august|september|oktober|october|november|desember|december';
+const NLU_WD = {senin:0, selasa:1, rabu:2, kamis:3, jumat:4, "jum'at":4, sabtu:5, minggu:6};
+function parseQuestion(q, vocab, maxDay, minDay){
+  vocab = vocab || {};
+  const raw = String(q || ''), quoted = /["“”']([^"“”']{2,60})["“”']/.exec(raw);
+  const t = ' ' + raw.toLowerCase().replace(/["“”']/g, ' ').replace(/[?!,;]/g, ' ').replace(/\s+/g, ' ') + ' ';
+  const has = re => re.test(t);
+  const understood = [];
+  const maxY = +maxDay.slice(0, 4), maxM = +maxDay.slice(5, 7);
+  const yearFor = mo => mo > maxM ? maxY - 1 : maxY;
+  const mon = s => MONTH_ALIASES[s];
+  const dayIn = (y, m, d) => `${y}-${pad(m)}-${pad(Math.min(d, daysInMonth(y, m)))}`;
+  /* ---- periode ---- */
+  let p = null, plabel = '', forceCmp = false;
+  const R = (re) => re.exec(t);
+  let m;
+  if ((m = R(new RegExp(`(\\d{1,2})\\s+(${NLU_MON})(?:\\s+(\\d{4}))?\\s*(?:-|–|sampai|s/d|sd|hingga|dan)\\s*(\\d{1,2})\\s+(${NLU_MON})(?:\\s+(\\d{4}))?`)))){
+    const m1 = mon(m[2]), m2 = mon(m[5]), y2 = +(m[6] || yearFor(m2)), y1 = +(m[3] || (m1 > m2 ? y2 - 1 : y2));
+    p = {mode:'custom', from:dayIn(y1, m1, +m[1]), to:dayIn(y2, m2, +m[4])};
+  } else if ((m = R(new RegExp(`(\\d{1,2})\\s*(?:-|–|sampai|s/d|sd|hingga)\\s*(\\d{1,2})\\s+(${NLU_MON})(?:\\s+(\\d{4}))?`)))){
+    const mo = mon(m[3]), y = +(m[4] || yearFor(mo)); p = {mode:'custom', from:dayIn(y, mo, +m[1]), to:dayIn(y, mo, +m[2])};
+  } else if ((m = R(/(\d{4}-\d{2}-\d{2})\s*(?:-|–|sampai|s\/d|sd|hingga|dan)\s*(\d{4}-\d{2}-\d{2})/))){
+    p = {mode:'custom', from:m[1] <= m[2] ? m[1] : m[2], to:m[1] <= m[2] ? m[2] : m[1]};
+  } else if ((m = R(new RegExp(`(?:tanggal|tgl)\\s+(\\d{1,2})\\s+(${NLU_MON})(?:\\s+(\\d{4}))?`)))){
+    const mo = mon(m[2]), y = +(m[3] || yearFor(mo)); p = {mode:'day', day:dayIn(y, mo, +m[1])};
+  } else if ((m = R(/(\d{4}-\d{2}-\d{2})/))){ p = {mode:'day', day:m[1]}; }
+  else if ((m = R(new RegExp(`(?:bulan\\s+)?\\b(${NLU_MON})\\b(?:\\s+(\\d{4}))?`)))){
+    const mo = mon(m[1]), y = +(m[2] || yearFor(mo)); p = {mode:'month', month:`${y}-${pad(mo)}`};
+  } else if ((m = R(/tahun\s+(\d{4})|\b(20\d{2})\b/))){ p = {mode:'year', year:m[1] || m[2]}; }
+  else if (has(/tahun ini/) && has(/tahun lalu/)){ p = {mode:'year', year:String(maxY)}; forceCmp = true; }
+  else if (has(/bulan ini/) && has(/bulan lalu|bulan sebelumnya/)){ p = {mode:'month', month:maxDay.slice(0, 7)}; forceCmp = true; }
+  else if (has(/(minggu|pekan) ini/) && has(/(minggu|pekan) lalu/)){ p = {mode:'custom', from:weekStartStr(maxDay), to:maxDay}; forceCmp = true; }
+  else if (has(/tahun lalu|tahun kemarin/)) p = {mode:'year', year:String(maxY - 1)};
+  else if (has(/tahun ini/)) p = {mode:'year', year:String(maxY)};
+  else if (has(/bulan lalu|bulan kemarin|bulan sebelumnya/)){ let y = maxY, mo = maxM - 1; if (mo < 1){ mo = 12; y--; } p = {mode:'month', month:`${y}-${pad(mo)}`}; }
+  else if (has(/bulan ini|bulan terakhir/) && !/\d+\s+bulan terakhir/.test(t)) p = {mode:'month', month:maxDay.slice(0, 7)};
+  else if ((m = R(/(\d+)\s+(hari|minggu|bulan)\s+(?:terakhir|lalu|belakangan|kebelakang)/))){
+    const n = +m[1];
+    if (m[2] === 'bulan'){ let y = maxY, mo = maxM - (n - 1); while (mo < 1){ mo += 12; y--; } p = {mode:'custom', from:`${y}-${pad(mo)}-01`, to:maxDay}; }
+    else p = {mode:'custom', from:addDaysStr(maxDay, -(n * (m[2] === 'minggu' ? 7 : 1) - 1)), to:maxDay};
+  }
+  else if (has(/minggu lalu|pekan lalu/)){ const w = addDaysStr(weekStartStr(maxDay), -7); p = {mode:'week', week:w}; }
+  else if (has(/minggu ini|pekan ini/)) p = {mode:'custom', from:weekStartStr(maxDay), to:maxDay};
+  else if (has(/kemarin/)) p = {mode:'day', day:addDaysStr(maxDay, -1)};
+  else if (has(/hari ini|hari terakhir/)) p = {mode:'day', day:maxDay};
+  else if (has(/semua data|seluruh data|keseluruhan|sepanjang waktu|dari awal/)) { p = null; plabel = 'seluruh data'; }
+  let rng = p ? periodRange(p, maxDay) : null;
+  const fullRng = rng; if (rng && rng.to > maxDay && rng.from <= maxDay) rng = {from: rng.from, to: maxDay};
+  if (rng){ plabel = `${rng.from} s/d ${rng.to}`; understood.push('periode ' + plabel); }
+  /* ---- filter entitas ---- */
+  const filters = {};
+  const wordIn = (name) => { const n = String(name).toLowerCase(); return n.length >= 3 && t.includes(' ' + n + ' ') || (n.length >= 3 && new RegExp('(^|[^a-z0-9])' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)').test(t)); };
+  const pick = (list, minLen) => (list || []).filter(x => x && String(x).length >= (minLen || 3) && wordIn(x));
+  const plats = pick(vocab.platforms, 3), brands = pick((vocab.brands || []).filter(b => !/^(others|lainnya|-)$/i.test(b)), 3), cats = pick((vocab.categories || []).filter(c => !/^(lainnya|biaya lain|-)$/i.test(c)), 3), persons = pick(vocab.persons, 3);
+  let accs = pick(vocab.accounts, 4); accs = accs.filter(a => !accs.some(b => b !== a && b.toLowerCase().includes(a.toLowerCase())));
+  if (plats.length){ filters.platform = plats; understood.push('platform ' + plats.join(', ')); }
+  if (brands.length){ filters.brand = brands; understood.push('brand ' + brands.join(', ')); }
+  if (cats.length){ filters.category = cats; understood.push('kategori ' + cats.join(', ')); }
+  if (persons.length){ filters.person = persons; understood.push('admin ' + persons.join(', ')); }
+  if (accs.length){ filters.admin = accs; understood.push('akun ' + accs.join(', ')); }
+  if (quoted){ filters.product_contains = quoted[1].trim(); understood.push(`produk mengandung "${quoted[1].trim()}"`); }
+  else if ((m = R(/produk\s+(?:bernama\s+|dengan nama\s+)?([a-z0-9][a-z0-9 .\-]{2,40}?)(?=\s+(?:bulan|tahun|minggu|hari|per|di|pada|untuk|berapa|dengan|vs)\b|\s*$)/)) && !/^(apa|yang|terlaris|teratas|terbaik|mana|paling|top)\b/.test(m[1])){ filters.product_contains = m[1].trim(); understood.push(`produk mengandung "${m[1].trim()}"`); }
+  /* hari spesial */
+  let specialCompare = false;
+  const wantTwin = has(/kembar|twin/), wantPeak = has(/\bpeak\b|payday|gajian|tanggal 25|tgl 25/), wantNormal = has(/hari biasa|non[- ]?spesial/);
+  if ((wantTwin ? 1 : 0) + (wantPeak ? 1 : 0) + (wantNormal ? 1 : 0) >= 2 || (has(/spesial/) && has(/bandingkan|banding|vs|versus|dibanding/))) specialCompare = true;
+  else if (wantTwin){ filters.special_day = 'twin'; understood.push('hanya Tanggal Kembar'); }
+  else if (wantPeak){ filters.special_day = 'peak'; understood.push('hanya Peak Day (tgl 25)'); }
+  else if (wantNormal){ filters.special_day = 'normal'; understood.push('hanya hari biasa'); }
+  /* hari dalam seminggu sebagai filter */
+  const askWeekday = has(/hari apa|hari terbaik|hari paling|hari dalam seminggu|per hari dalam/);
+  if (!askWeekday){ const wds = Object.keys(NLU_WD).filter(w => new RegExp('\\bhari ' + w + '\\b|\\bpada ' + w + '\\b|\\bsetiap ' + w + '\\b').test(t)).map(w => HARI_Q[NLU_WD[w]]); if (wds.length){ filters.weekday = wds; understood.push('hari ' + wds.join(', ')); } }
+  /* tanggal dalam bulan (mis. tanggal 25) bila bukan peak/tgl lengkap */
+  if (!p && !specialCompare && !wantPeak && (m = R(new RegExp(`(?:tanggal|tgl)\\s+(\\d{1,2})(?!\\d|\\s+(?:${NLU_MON}))`)))){ filters.day_of_month = [+m[1]]; understood.push('tanggal ' + m[1] + ' setiap bulan'); }
+  if (!/\bpacking\b|biaya lain/.test(t) && has(/tanpa (?:biaya lain|packing)/)) filters.include_packing = false;
+  if (rng){ filters.date_from = rng.from; filters.date_to = rng.to; }
+  /* ---- metrik ---- */
+  let primary = 'omzet';
+  if (has(/\b(unit|qty|kuantitas|pcs|jumlah barang|terjual)\b/)) primary = 'units';
+  if (has(/\b(order|pesanan|transaksi)\b/) && !has(/rata[- ]?rata|per order/)) primary = 'orders';
+  if (has(/\b(nota|cetak|mencetak)\b/)) primary = 'notas';
+  if (has(/\b(fee|potongan|komisi marketplace)\b/)) primary = 'fee';
+  if (has(/rata[- ]?rata (?:nilai )?(?:per )?(?:order|pesanan)|\baov\b|nilai per order/)) primary = 'aov';
+  if (has(/penjualan produk|\bgross\b/)) primary = 'penjualan_produk';
+  if (has(/omzet per hari aktif|rata[- ]?rata omzet harian/)) primary = 'omzet_per_hari_aktif';
+  /* ---- dimensi ---- */
+  const D = [['platform', /\b(platform|marketplace|market place)\b/], ['person', /\b(admin|orang|karyawan|tim|siapa|petugas)\b/], ['product', /\b(produk|barang|item|sku)\b/], ['category', /\b(kategori)\b/], ['brand', /\b(brand|merek|merk)\b/],
+    ['month', /per bulan|tiap bulan|bulanan|setiap bulan|\btren\b|perkembangan|grafik bulan/], ['date', /per hari(?! dalam)|harian|tiap hari|setiap hari/], ['week', /per minggu|mingguan|tiap minggu|setiap minggu/], ['year', /per tahun|tahunan|tiap tahun|setiap tahun/],
+    ['weekday', /hari apa|hari terbaik|hari paling|per hari dalam|hari dalam seminggu|hari terkuat|hari tersepi/], ['hour', /\bjam\b/]];
+  const found = [];
+  for (const [d, re] of D){ const mm = re.exec(t); if (mm) found.push({d, i:mm.index}); }
+  let dimsFound = found.sort((a, b) => a.i - b.i).map(x => x.d);
+  /* kata entitas yang sebenarnya nama filter (mis. "admin" pada filter admin) tidak otomatis jadi dimensi bila filter sudah spesifik */
+  const entityFilter = {platform:plats.length, person:persons.length, brand:brands.length, category:cats.length};
+  if (plats.length > 1) dimsFound.unshift('platform'); if (persons.length > 1) dimsFound.unshift('person'); if (brands.length > 1) dimsFound.unshift('brand'); if (cats.length > 1) dimsFound.unshift('category');
+  dimsFound = [...new Set(dimsFound)];
+  dimsFound = dimsFound.filter(d => !(entityFilter[d] === 1 && !has(new RegExp('(per|tiap|setiap) ' + d)) ));
+  if (has(/\b(tren|perkembangan)\b/) && !dimsFound.some(d => Q_TIME.has(d))) dimsFound.push('month');
+  if (specialCompare) dimsFound = ['special_day'];
+  const TIMED = dimsFound.filter(d => Q_TIME.has(d)), ENT = dimsFound.filter(d => !Q_TIME.has(d));
+  let views = [];
+  if (TIMED.includes('weekday') && TIMED.includes('hour')) views = [['weekday'], ['hour']];
+  else {
+    const dd = [];
+    if (TIMED.length) dd.push(TIMED[0]);
+    if (ENT.length) dd.push(ENT[0]);
+    if (!dd.length && has(/terlaris|teratas|terbaik|terbanyak|terbesar|terendah|terburuk|paling/)){ /* "paling X" tanpa dimensi: coba dari metrik */ }
+    views = [dd];
+  }
+  if (views.length === 1 && views[0].length === 0 && has(/terlaris|top\s*\d+|teratas/) && !filters.product_contains) views = [['product']];
+  const asc = has(/terendah|paling sedikit|terkecil|terburuk|paling rendah|paling kecil|tersepi|terlemah|paling jarang/);
+  let limit = null;
+  if ((m = R(/\btop\s*(\d{1,3})\b/)) || (m = R(/\b(\d{1,3})\s+(?:produk|brand|merek|platform|admin|kategori|orang|barang|item|besar|teratas|terlaris|terbaik|terbanyak|terendah|terburuk)\b/))) limit = +m[1];
+  if (limit && limit > 200) limit = 200;
+  const compare = (forceCmp || has(/bandingkan|dibanding|banding|\bvs\b|versus|naik|turun|pertumbuhan|growth|perubahan|selisih/)) && !!rng && !specialCompare;
+  /* spec per view */
+  const specs = views.map(dd => {
+    const ent = dd.filter(d => !Q_TIME.has(d)), timeD = dd.filter(d => Q_TIME.has(d));
+    let metrics = [primary];
+    if (specialCompare) metrics = ['omzet_per_hari_aktif', 'omzet', 'orders', 'active_days'];
+    else {
+      for (const c of ['omzet', 'orders', 'units']) if (!metrics.includes(c)) metrics.push(c);
+      if (dd.includes('person') && !metrics.includes('notas')) metrics.push('notas');
+      if (ent.length && !metrics.includes('share_omzet') && primary === 'omzet') metrics.push('share_omzet');
+      metrics = metrics.slice(0, 5);
+    }
+    const sp = {group_by:dd, metrics, filters:{...filters}};
+    if (specialCompare && !rng){ sp.filters.date_from = addDaysStr(maxDay, -180); sp.filters.date_to = maxDay; }
+    if (dd[0] === 'date' && !rng){ sp.filters.date_from = addDaysStr(maxDay, -29); sp.filters.date_to = maxDay; }
+    if (timeD.length){ sp.order_by = 'key'; sp.descending = false; sp.limit = 200; }
+    else if (dd.length){ sp.order_by = primary; sp.descending = !asc; sp.limit = limit || (dd[0] === 'product' ? 10 : 15); }
+    return sp;
+  });
+  if (specs.some(sp => sp.group_by[0] === 'date' && !rng)) understood.push('30 hari terakhir data (karena periode tidak disebut)');
+  if (specialCompare) understood.push('perbandingan Tanggal Kembar / Peak Day / hari biasa' + (rng ? '' : ' (180 hari terakhir)'));
+  const metricNames = {omzet:'omzet', units:'unit terjual', orders:'jumlah order', notas:'jumlah nota', fee:'fee', aov:'rata-rata per order', penjualan_produk:'penjualan produk', omzet_per_hari_aktif:'omzet per hari aktif'};
+  const dn = {platform:'platform', person:'admin', product:'produk', category:'kategori', brand:'brand', month:'bulan', date:'hari', week:'minggu', year:'tahun', weekday:'hari dalam seminggu', hour:'jam', special_day:'jenis hari', admin:'akun admin', tab:'tab'};
+  understood.unshift(`${metricNames[primary]}${views.map(v => v.length ? ' per ' + v.map(x => dn[x]).join(' & ') : ' (total)').join('; ')}`);
+  const strong = !!(rng || Object.keys(filters).length || dimsFound.length || views.some(v => v.length) || specialCompare || has(/\b(omzet|penjualan|order|unit|nota|fee|pendapatan|revenue|laba)\b/));
+  return {ok:strong, understood, specs, primary, compare, period:p, rng, fullRng, asc};
 }
 /*CORE-END*/
 
@@ -1551,8 +1697,8 @@ function setRoute(r, noRender){
   $$('.dashonly').forEach(e => e.classList.toggle('hidden', r !== 'dash'));
   $('#navDash').classList.toggle('on', r === 'dash'); $('#navAdmin').classList.toggle('on', r === 'admin');
   $('#btnExport').textContent = r === 'admin' ? '⬇ Ekspor CSV Admin' : '⬇ Ekspor CSV';
-  $('#ttl').textContent = r === 'admin' ? 'Admin Report' : r === 'ai' ? 'Asisten AI' : CONFIG.TITLE;
-  document.title = r === 'admin' ? 'Admin Report · ' + CONFIG.TITLE : r === 'ai' ? 'Asisten AI · ' + CONFIG.TITLE : CONFIG.TITLE;
+  $('#ttl').textContent = r === 'admin' ? 'Admin Report' : r === 'ai' ? 'Asisten Data' : CONFIG.TITLE;
+  document.title = r === 'admin' ? 'Admin Report · ' + CONFIG.TITLE : r === 'ai' ? 'Asisten Data · ' + CONFIG.TITLE : CONFIG.TITLE;
   if (!noRender && S.all.length){ render(); if (r === 'admin') aEditor(); }
 }
 
@@ -1560,7 +1706,7 @@ function setRoute(r, noRender){
 /* ---------- Asisten AI ---------- */
 const AI = {key:'', model:'claude-sonnet-5-5', remember:true, busy:false, turns:[], charts:[], started:false};
 const AI_MODELS = [['claude-sonnet-5-5', 'Claude Sonnet 5.5 (seimbang, disarankan)'], ['claude-haiku-4-5-20251001', 'Claude Haiku 4.5 (paling hemat)'], ['claude-opus-5-5', 'Claude Opus 5.5 (paling teliti)']];
-const AI_CHIPS = ['Ringkasan performa bulan terakhir', 'Platform mana yang paling besar & bagaimana trennya?', '10 produk terlaris', 'Bandingkan Tanggal Kembar & Peak Day dengan hari biasa', 'Performa tiap admin (per orang)', 'Jam dan hari terbaik untuk jualan', 'Strategi menaikkan omzet bulan depan'];
+const AI_CHIPS = ['Ringkasan performa bulan terakhir', 'Omzet per platform 6 bulan terakhir', '10 produk terlaris bulan ini', 'Bandingkan omzet bulan ini dengan bulan lalu', 'Bandingkan Tanggal Kembar, Peak Day, dan hari biasa', 'Performa tiap admin bulan ini', 'Jam dan hari terbaik untuk jualan', 'Strategi menaikkan omzet bulan depan'];
 function aiLoadSettings(){
   try {
     const k = localStorage.getItem('ai_key') || sessionStorage.getItem('ai_key') || '';
@@ -1585,7 +1731,7 @@ function aiDeleteKey(){
 function aiStatus(){
   $('#aiStatus').innerHTML = AI.key
     ? `<span class="up">● AI aktif</span> · model ${esc(AI.model)} · bisa menjawab pertanyaan apa pun tentang database penjualan & strategi`
-    : `<span class="dn">● Mode cepat</span> (tanpa API key): menjawab pertanyaan umum dari aturan bawaan. Klik <b>Pengaturan</b> dan masukkan API key Anthropic untuk AI penuh.`;
+    : `<span class="up">● Mode gratis</span> · tanpa API key & tanpa biaya · dihitung langsung di browser Anda, data tidak dikirim ke mana pun. (Opsional: AI eksternal lewat <b>Pengaturan</b>.)`;
   $('#aiModel').innerHTML = AI_MODELS.map(m => `<option value="${m[0]}" ${m[0] === AI.model ? 'selected' : ''}>${m[1]}</option>`).join('');
   $('#aiRemember').checked = AI.remember;
   $('#aiKeyHint').textContent = AI.key ? `Key tersimpan (…${AI.key.slice(-4)}). Kosongkan kolom jika tidak ingin menggantinya.` : '';
@@ -1675,7 +1821,7 @@ const AI_TOOLS = [
     input_schema:{type:'object', properties:{
       group_by:{type:'array', maxItems:2, items:{type:'string', enum:Q_DIMS}, description:'Dimensi pengelompokan (maks 2). Kosong = hanya total.'},
       metrics:{type:'array', items:{type:'string', enum:Q_METRICS}, description:'Metrik. omzet=jumlah kolom Total; penjualan_produk=Total−fee; orders=no. referensi unik; notas=unik (akun admin+no. referensi); aov=omzet/order; share_omzet=% dari total hasil filter.'},
-      filters:{type:'object', properties:{date_from:{type:'string', description:'YYYY-MM-DD'}, date_to:{type:'string', description:'YYYY-MM-DD'}, platform:{type:'array', items:{type:'string'}}, admin:{type:'array', items:{type:'string'}, description:'nama akun admin persis seperti di data'}, person:{type:'array', items:{type:'string'}, description:'nama orang hasil pemetaan akun admin'}, category:{type:'array', items:{type:'string'}}, brand:{type:'array', items:{type:'string'}}, product_contains:{type:'string'}, weekday:{type:'array', items:{type:'string', enum:HARI_Q}}, special_day:{type:'string', enum:['twin', 'peak', 'normal']}, include_packing:{type:'boolean', description:'default true; false = buang "Biaya Lain"'}}},
+      filters:{type:'object', properties:{date_from:{type:'string', description:'YYYY-MM-DD'}, date_to:{type:'string', description:'YYYY-MM-DD'}, platform:{type:'array', items:{type:'string'}}, admin:{type:'array', items:{type:'string'}, description:'nama akun admin persis seperti di data'}, person:{type:'array', items:{type:'string'}, description:'nama orang hasil pemetaan akun admin'}, category:{type:'array', items:{type:'string'}}, brand:{type:'array', items:{type:'string'}}, product_contains:{type:'string'}, weekday:{type:'array', items:{type:'string', enum:HARI_Q}}, special_day:{type:'string', enum:['twin', 'peak', 'normal']}, day_of_month:{type:'array', items:{type:'integer'}}, include_packing:{type:'boolean', description:'default true; false = buang "Biaya Lain"'}}},
       order_by:{type:'string', description:'nama metrik atau "key"'}, descending:{type:'boolean'}, limit:{type:'integer', description:'default 20, maks 200'}}}},
   {name:'show_chart', description:'Tampilkan grafik kepada pengguna. Isi labels & data persis dari hasil query_sales. Gunakan untuk tren (line), perbandingan (bar/hbar/stacked_bar), komposisi (doughnut).',
     input_schema:{type:'object', required:['type', 'labels', 'datasets'], properties:{type:{type:'string', enum:['bar', 'hbar', 'line', 'stacked_bar', 'doughnut']}, title:{type:'string'}, labels:{type:'array', items:{type:'string'}}, datasets:{type:'array', items:{type:'object', required:['label', 'data'], properties:{label:{type:'string'}, data:{type:'array', items:{type:'number'}}}}}, value_format:{type:'string', enum:['rp', 'int', 'pct', 'number']}}}},
@@ -1754,7 +1900,70 @@ async function runLLM(q, bubble){
   AI.turns.push(turn);
 }
 
-/* --- Mode cepat (tanpa API key): jawaban dari aturan bawaan --- */
+/* --- Penjawab pertanyaan lokal (gratis, tanpa AI eksternal): memahami kalimat Indonesia lalu menghitung dari data --- */
+function nluVocab(){
+  const u = k => [...new Set(S.all.map(r => r[k]))].filter(Boolean);
+  const persons = [...new Set(u('admin').map(a => personOf(a, A.map)))].filter(x => x !== UNMAPPED);
+  return {platforms:u('plat'), brands:u('brand'), categories:u('cat'), persons, accounts:u('admin')};
+}
+const MET_LABEL = {omzet:'Omzet', penjualan_produk:'Penjualan produk', fee:'Fee', orders:'Order', notas:'Nota', units:'Unit', aov:'Rata² / order', active_days:'Hari aktif', omzet_per_hari_aktif:'Omzet / hari aktif', share_omzet:'% omzet'};
+const MET_FMT = {omzet:'rp', penjualan_produk:'rp', fee:'rp', aov:'rp', omzet_per_hari_aktif:'rp', share_omzet:'pct'};
+const mFmt = (m, v) => fmtVal(MET_FMT[m] || 'int', v);
+const DIM_LABEL = {date:'Tanggal', week:'Minggu (mulai)', month:'Bulan', year:'Tahun', weekday:'Hari', hour:'Jam', platform:'Platform', admin:'Akun admin', person:'Admin', category:'Kategori', brand:'Brand', product:'Produk', special_day:'Jenis hari', tab:'Tab'};
+function dimText(d, v){ return d === 'date' ? fmtDay(v) : d === 'month' ? monthLabel(v) : d === 'week' ? 'Mgg ' + fmtDay(v, {day:'2-digit', month:'short'}) : String(v); }
+function localFree(q, bubble){
+  const pq = parseQuestion(q, nluVocab(), S.maxDay, S.minDay);
+  if (!pq.ok) return false;
+  const ctx = aiCtx();
+  bubble.md(`**Saya memahami:** ${pq.understood.join(' · ')}.` + (pq.rng ? '' : ' _(periode tidak disebut → seluruh data)_'));
+  let prevRng = null;
+  if (pq.compare && pq.period){ prevRng = prevRange(pq.period, pq.fullRng || pq.rng, S.maxDay); }
+  pq.specs.forEach(sp => {
+    const res = runQuery(S.all, sp, ctx), dims = sp.group_by, M = sp.metrics, pm = M[0];
+    if (res.error){ bubble.md('⚠ ' + res.error); return; }
+    if (!res.filtered_rows){ bubble.md('Tidak ada data yang cocok dengan filter tersebut. Coba periode atau nama yang lain.'); return; }
+    let prev = null;
+    if (prevRng){ const sp2 = JSON.parse(JSON.stringify(sp)); sp2.filters.date_from = prevRng.from; sp2.filters.date_to = prevRng.to; sp2.limit = 200; prev = runQuery(S.all, sp2, ctx); }
+    const dl = (c, p) => p > 0 ? ((c / p - 1) * 100) : null;
+    const dtxt = d => d === null ? '—' : `${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)}%`;
+    if (!dims.length){
+      const T = res.totals, PT = prev && prev.filtered_rows ? prev.totals : null;
+      if (prevRng && !PT) bubble.md(`_Tidak ada data pada periode pembanding (${prevRng.from} s/d ${prevRng.to})._`);
+      bubble.md((PT ? `Dibanding ${prevRng.from} s/d ${prevRng.to}:\n` : '') + M.map(m => `- **${MET_LABEL[m]}:** ${mFmt(m, T[m])}${PT ? ` (sebelumnya ${mFmt(m, PT[m])}, ${dtxt(dl(T[m], PT[m]))})` : ''}`).join('\n'));
+      if (PT) bubble.chart({type:'bar', title:`${MET_LABEL[pm]}: periode ini vs sebelumnya`, labels:['Sebelumnya', 'Periode ini'], datasets:[{label:MET_LABEL[pm], data:[PT[pm], T[pm]]}], value_format:MET_FMT[pm] || 'int'});
+      return;
+    }
+    const rows = res.rows, key = r => dims.map(d => r[d]).join('\u0001');
+    const prevMap = prev && prev.rows && prev.filtered_rows ? new Map(prev.rows.map(r => [key(r), r])) : null;
+    if (prevRng && !prevMap) bubble.md(`_Tidak ada data pada periode pembanding (${prevRng.from} s/d ${prevRng.to})._`);
+    const cols = [...dims.map(d => DIM_LABEL[d]), ...M.map(m => MET_LABEL[m])].concat(prevMap ? [`${MET_LABEL[pm]} sebelumnya`, 'Perubahan'] : []);
+    bubble.table({title:`${MET_LABEL[pm]} per ${dims.map(d => DIM_LABEL[d].toLowerCase()).join(' & ')}${res.groups > rows.length ? ` (${rows.length} dari ${res.groups})` : ''}`, columns:cols,
+      rows:rows.map(r => [...dims.map(d => dimText(d, r[d])), ...M.map(m => mFmt(m, r[m]))].concat(prevMap ? [(prevMap.get(key(r)) ? mFmt(pm, prevMap.get(key(r))[pm]) : '—'), dtxt(dl(r[pm], prevMap.get(key(r)) ? prevMap.get(key(r))[pm] : 0))] : []))});
+    const fmt = MET_FMT[pm] || 'int', timeD = dims.filter(d => Q_TIME.has(d)), entD = dims.filter(d => !Q_TIME.has(d));
+    if (timeD.length){
+      const td = timeD[0], keys = [...new Set(rows.map(r => r[td]))], lab = keys.map(k => dimText(td, k));
+      if (entD.length){
+        const tot = new Map(); rows.forEach(r => tot.set(r[entD[0]], (tot.get(r[entD[0]]) || 0) + r[pm]));
+        const ents = [...tot.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(x => x[0]);
+        bubble.chart({type:(td === 'date' || td === 'week') ? 'line' : 'stacked_bar', title:`${MET_LABEL[pm]} per ${DIM_LABEL[td].toLowerCase()} menurut ${DIM_LABEL[entD[0]].toLowerCase()}`, labels:lab,
+          datasets:ents.map(e => ({label:String(e), data:keys.map(k => (rows.find(r => r[td] === k && r[entD[0]] === e) || {[pm]:0})[pm])})), value_format:fmt});
+      } else {
+        bubble.chart({type:(['date', 'week', 'month'].includes(td) && keys.length > 2) ? 'line' : 'bar', title:`${MET_LABEL[pm]} per ${DIM_LABEL[td].toLowerCase()}`, labels:lab, datasets:[{label:MET_LABEL[pm], data:rows.map(r => r[pm])}], value_format:fmt});
+        const hi = rows.reduce((a, b) => b[pm] > a[pm] ? b : a), lo = rows.reduce((a, b) => b[pm] < a[pm] ? b : a), avg = rows.reduce((s, r) => s + r[pm], 0) / rows.length;
+        if (rows.length > 2) bubble.md(`Tertinggi: **${dimText(td, hi[td])}** (${mFmt(pm, hi[pm])}) · terendah: **${dimText(td, lo[td])}** (${mFmt(pm, lo[pm])}) · rata-rata ${mFmt(pm, avg)}.`);
+      }
+    } else {
+      const d0 = entD[0], labels = rows.map(r => { const s = String(r[d0]); return s.length > 44 ? s.slice(0, 42) + '…' : s; });
+      const type = d0 === 'platform' && rows.length <= 6 && fmt !== 'pct' ? 'doughnut' : (rows.length > 7 || d0 === 'product') ? 'hbar' : 'bar';
+      bubble.chart({type, title:`${MET_LABEL[pm]} per ${DIM_LABEL[d0].toLowerCase()}`, labels, datasets:[{label:MET_LABEL[pm], data:rows.map(r => r[pm])}], value_format:fmt});
+      const first = rows[0];
+      if (first && rows.length > 1){ const sum = rows.reduce((s, r) => s + r[pm], 0); bubble.md(`${pq.asc ? 'Terendah' : 'Teratas'}: **${first[d0]}** (${mFmt(pm, first[pm])}${sum ? `, ${pct(first[pm], sum)} dari yang ditampilkan` : ''}).`); }
+    }
+  });
+  return true;
+}
+
+/* --- Mode lokal gratis: ringkasan & strategi berbasis aturan --- */
 function lastMonthInfo(){
   const mx = S.maxDay, ym = mx.slice(0, 7), pm = shiftMonth(ym, -1);
   const pto = `${pm}-${pad(Math.min(+mx.slice(8, 10), daysInMonth(+pm.slice(0, 4), +pm.slice(5, 7))))}`;
@@ -1766,7 +1975,7 @@ function localAnswer(q, bubble){
   const t = q.toLowerCase(), ctx = aiCtx(), Q = spec => runQuery(S.all, spec, ctx), L = lastMonthInfo();
   const per = {date_from:L.from, date_to:L.to}, prev = {date_from:L.pfrom, date_to:L.pto}, lbl = monthLabel(L.ym);
   const has = (...w) => w.some(x => t.includes(x));
-  const note = '\n\n_Mode cepat (tanpa API key). Masukkan API key Anthropic di Pengaturan agar AI bisa menjawab pertanyaan bebas dan menyusun strategi yang lebih mendalam._';
+  const note = '\n\n_Rekomendasi otomatis berbasis aturan dari data Anda (dihitung di browser, tanpa AI eksternal)._';
   if (has('strategi', 'saran', 'rekomendasi', 'naikkan', 'naik ', 'tingkatkan', 'marketing', 'pemasaran')){
     const pl = Q({group_by:['platform'], metrics:['omzet', 'share_omzet', 'aov'], filters:per}).rows;
     const sd = Q({group_by:['special_day'], metrics:['omzet_per_hari_aktif', 'orders'], filters:{date_from:addDaysStr(L.to, -120), date_to:L.to}}).rows;
@@ -1777,13 +1986,13 @@ function localAnswer(q, bubble){
     const biasa = sd.find(x => x.special_day === 'Hari Biasa'), peak = sd.find(x => x.special_day === 'Peak Day'), twin = sd.find(x => x.special_day === 'Tanggal Kembar');
     const out = [`### Rekomendasi otomatis berbasis data ${lbl}`, `**Posisi saat ini:** omzet ${fmtRp(tot.omzet)} dari ${fmtInt(tot.orders)} order, rata-rata ${fmtRp(tot.aov)}/order${dTxt(dPct(tot.omzet, ptot.omzet))}.`, ''];
     let n = 1;
-    if (pl[0] && pl[0].share_omzet >= 50) out.push(`${n++}. **Kurangi ketergantungan pada ${pl[0].platform}** (${pl[0].share_omzet}% omzet). Dorong ${pl[1] ? pl[1].platform : 'platform lain'} dengan voucher toko, bundling khusus platform, dan iklan agar tidak terlalu bergantung pada satu kanal.`);
-    else if (pl[0]) out.push(`${n++}. **Pertahankan kekuatan di ${pl[0].platform}** (${pl[0].share_omzet}% omzet) dan dorong platform terkecil (${pl[pl.length - 1].platform}) dengan promo uji coba 2 minggu.`);
+    if (pl[0] && pl[0].share_omzet >= 50) out.push(`${n++}. **Kurangi ketergantungan pada ${pl[0].platform}** (${(+pl[0].share_omzet).toLocaleString('id-ID')}% omzet). Dorong ${pl[1] ? pl[1].platform : 'platform lain'} dengan voucher toko, bundling khusus platform, dan iklan agar tidak terlalu bergantung pada satu kanal.`);
+    else if (pl[0]) out.push(`${n++}. **Pertahankan kekuatan di ${pl[0].platform}** (${(+pl[0].share_omzet).toLocaleString('id-ID')}% omzet) dan dorong platform terkecil (${pl[pl.length - 1].platform}) dengan promo uji coba 2 minggu.`);
     if (peak && biasa && biasa.omzet_per_hari_aktif) out.push(`${n++}. **Peak Day tgl 25** menghasilkan ${fmtC(peak.omzet_per_hari_aktif)}/hari vs hari biasa ${fmtC(biasa.omzet_per_hari_aktif)} (${(peak.omzet_per_hari_aktif / biasa.omzet_per_hari_aktif).toFixed(1)}×). Siapkan stok, iklan, dan voucher mulai H-3, plus broadcast ke pelanggan lama.`);
     if (twin && biasa && biasa.omzet_per_hari_aktif) out.push(`${n++}. **Tanggal Kembar** menghasilkan ${fmtC(twin.omzet_per_hari_aktif)}/hari (${(twin.omzet_per_hari_aktif / biasa.omzet_per_hari_aktif).toFixed(1)}× hari biasa). ${twin.omzet_per_hari_aktif < biasa.omzet_per_hari_aktif ? 'Masih di bawah hari biasa — evaluasi kedalaman diskon dan promosinya.' : 'Pastikan kampanye tgl kembar selalu aktif di semua platform.'}`);
     if (wd[0]) out.push(`${n++}. **Hari terkuat: ${wd[0].weekday}**, terlemah: ${wd[wd.length - 1].weekday}. Jadwalkan iklan/flash sale di hari kuat, dan uji promo khusus di ${wd[wd.length - 1].weekday} untuk menaikkan hari lemah.`);
     if (hr[0]) out.push(`${n++}. **Jam order terbanyak: ${hr[0].hour}** (${hr.slice(0, 3).map(x => x.hour).join(', ')}). Pastikan admin siaga, balas chat cepat, dan jadwalkan live/iklan 1 jam sebelumnya.`);
-    if (cat[0]) out.push(`${n++}. **Kategori utama: ${cat.map(c => `${c.category} (${c.share_omzet}%)`).join(', ')}.** Buat bundling lintas kategori (mis. komponen pelengkap) untuk menaikkan nilai per order.`);
+    if (cat[0]) out.push(`${n++}. **Kategori utama: ${cat.map(c => `${c.category} (${(+c.share_omzet).toLocaleString('id-ID')}%)`).join(', ')}.** Buat bundling lintas kategori (mis. komponen pelengkap) untuk menaikkan nilai per order.`);
     out.push(`${n++}. **Naikkan rata-rata nilai order** (kini ${fmtRp(tot.aov)}): tawarkan paket hemat, minimum belanja untuk gratis ongkir/hadiah, dan cross-sell produk pelengkap.`);
     bubble.md(out.join('\n') + note);
     bubble.chart({type:'hbar', title:`Omzet per platform — ${lbl}`, labels:pl.map(x => x.platform), datasets:[{label:'Omzet', data:pl.map(x => x.omzet)}], value_format:'rp'});
@@ -1791,37 +2000,12 @@ function localAnswer(q, bubble){
     const a = Q({metrics:['omzet', 'penjualan_produk', 'fee', 'orders', 'units', 'aov', 'active_days'], filters:per}).totals, b = Q({metrics:['omzet', 'orders', 'aov'], filters:prev}).totals;
     const pl = Q({group_by:['platform'], metrics:['omzet', 'share_omzet'], filters:per}).rows, pr = Q({group_by:['product'], metrics:['omzet', 'units'], filters:{...per, include_packing:false}, limit:1}).rows[0];
     const days = Q({group_by:['date'], metrics:['omzet'], filters:per, limit:200}).rows;
-    bubble.md(`### Ringkasan ${lbl} (s/d ${fmtDay(L.to)})\n- **Omzet:** ${fmtRp(a.omzet)}${dTxt(dPct(a.omzet, b.omzet))}\n- **Penjualan produk:** ${fmtRp(a.penjualan_produk)} · **Fee:** ${fmtRp(a.fee)}\n- **Order:** ${fmtInt(a.orders)}${dTxt(dPct(a.orders, b.orders))} · **Unit:** ${fmtInt(a.units)}\n- **Rata-rata/order:** ${fmtRp(a.aov)}${dTxt(dPct(a.aov, b.aov))}\n- **Platform terbesar:** ${pl[0] ? `${pl[0].platform} (${pl[0].share_omzet}%)` : '—'}\n- **Produk terlaris:** ${pr ? `${pr.product} (${fmtRp(pr.omzet)})` : '—'}` + note);
+    bubble.md(`### Ringkasan ${lbl} (s/d ${fmtDay(L.to)})\n- **Omzet:** ${fmtRp(a.omzet)}${dTxt(dPct(a.omzet, b.omzet))}\n- **Penjualan produk:** ${fmtRp(a.penjualan_produk)} · **Fee:** ${fmtRp(a.fee)}\n- **Order:** ${fmtInt(a.orders)}${dTxt(dPct(a.orders, b.orders))} · **Unit:** ${fmtInt(a.units)}\n- **Rata-rata/order:** ${fmtRp(a.aov)}${dTxt(dPct(a.aov, b.aov))}\n- **Platform terbesar:** ${pl[0] ? `${pl[0].platform} (${(+pl[0].share_omzet).toLocaleString('id-ID')}%)` : '—'}\n- **Produk terlaris:** ${pr ? `${pr.product} (${fmtRp(pr.omzet)})` : '—'}` + note);
     bubble.chart({type:'line', title:`Omzet harian — ${lbl}`, labels:days.map(x => fmtDay(x.date, {day:'2-digit', month:'short'})), datasets:[{label:'Omzet', data:days.map(x => x.omzet)}], value_format:'rp'});
-  } else if (has('platform', 'marketplace', 'shopee', 'tokopedia', 'blibli', 'lazada')){
-    const r = Q({group_by:['platform'], metrics:['omzet', 'share_omzet', 'orders', 'aov'], filters:per}).rows;
-    const m = Q({group_by:['month', 'platform'], metrics:['omzet'], limit:200}).rows;
-    const months = [...new Set(m.map(x => x.month))].sort().slice(-6), plats = r.map(x => x.platform);
-    bubble.md(`### Platform — ${lbl}\n` + r.map(x => `- **${x.platform}:** ${fmtRp(x.omzet)} (${x.share_omzet}%) · ${fmtInt(x.orders)} order · rata-rata ${fmtRp(x.aov)}`).join('\n') + note);
-    bubble.chart({type:'doughnut', title:'Komposisi omzet per platform', labels:plats, datasets:[{label:'Omzet', data:r.map(x => x.omzet)}], value_format:'rp'});
-    bubble.chart({type:'stacked_bar', title:'Tren omzet 6 bulan terakhir per platform', labels:months.map(monthLabel), datasets:plats.map(p => ({label:p, data:months.map(mm => (m.find(x => x.month === mm && x.platform === p) || {omzet:0}).omzet)})), value_format:'rp'});
-  } else if (has('produk', 'terlaris', 'barang', 'item')){
-    const r = Q({group_by:['product'], metrics:['omzet', 'units', 'orders'], filters:{...per, include_packing:false}, limit:10}).rows;
-    bubble.md(`### 10 produk terlaris — ${lbl}` + note);
-    bubble.chart({type:'hbar', title:'Omzet per produk', labels:r.map(x => x.product.length > 42 ? x.product.slice(0, 40) + '…' : x.product), datasets:[{label:'Omzet', data:r.map(x => x.omzet)}], value_format:'rp'});
-    bubble.table({title:'Rincian', columns:['Produk', 'Unit', 'Order', 'Omzet'], rows:r.map(x => [x.product, x.units, x.orders, fmtRp(x.omzet)])});
-  } else if (has('kembar', 'peak', 'spesial', 'tgl 25', 'tanggal 25')){
-    const r = Q({group_by:['special_day'], metrics:['omzet', 'omzet_per_hari_aktif', 'orders', 'active_days'], filters:{date_from:addDaysStr(L.to, -180), date_to:L.to}}).rows;
-    const bs = r.find(x => x.special_day === 'Hari Biasa');
-    bubble.md(`### Hari spesial vs hari biasa (180 hari terakhir)\n` + r.map(x => `- **${x.special_day}:** ${fmtRp(x.omzet_per_hari_aktif)}/hari · ${fmtInt(x.orders)} order · ${x.active_days} hari${bs && x.special_day !== 'Hari Biasa' && bs.omzet_per_hari_aktif ? ` · ${(x.omzet_per_hari_aktif / bs.omzet_per_hari_aktif).toFixed(2)}× hari biasa` : ''}`).join('\n') + note);
-    bubble.chart({type:'bar', title:'Rata-rata omzet per hari', labels:r.map(x => x.special_day), datasets:[{label:'Omzet/hari', data:r.map(x => x.omzet_per_hari_aktif)}], value_format:'rp'});
-  } else if (has('admin', 'cetak', 'nota', 'orang', 'kpi', 'tim')){
-    const r = Q({group_by:['person'], metrics:['notas', 'omzet', 'share_omzet', 'active_days'], filters:per}).rows;
-    bubble.md(`### Performa admin — ${lbl}\n` + r.map(x => `- **${x.person}:** ${fmtInt(x.notas)} nota · ${fmtRp(x.omzet)} (${x.share_omzet}%) · ${x.active_days} hari aktif`).join('\n') + '\n\nUntuk persentase per marketplace, buka tab **Admin Report**.' + note);
-    bubble.chart({type:'bar', title:'Jumlah nota per admin', labels:r.map(x => x.person), datasets:[{label:'Nota', data:r.map(x => x.notas)}], value_format:'int'});
-  } else if (has('jam', 'hari terbaik', 'waktu', 'jadwal')){
-    const w = Q({group_by:['weekday'], metrics:['omzet', 'orders'], filters:per}).rows, h = Q({group_by:['hour'], metrics:['orders'], filters:per}).rows;
-    const bw = [...w].sort((a, b) => b.omzet - a.omzet)[0], bh = [...h].sort((a, b) => b.orders - a.orders)[0];
-    bubble.md(`### Waktu terbaik — ${lbl}\n- **Hari terkuat:** ${bw ? bw.weekday : '—'}\n- **Jam order terbanyak:** ${bh ? bh.hour : '—'}` + note);
-    bubble.chart({type:'bar', title:'Omzet per hari dalam seminggu', labels:w.map(x => x.weekday), datasets:[{label:'Omzet', data:w.map(x => x.omzet)}], value_format:'rp'});
-    bubble.chart({type:'bar', title:'Jumlah order per jam', labels:h.map(x => x.hour), datasets:[{label:'Order', data:h.map(x => x.orders)}], value_format:'int'});
+  } else if (localFree(q, bubble)){
+    /* dijawab oleh pemahaman pertanyaan lokal */
   } else {
-    bubble.md('Mode cepat hanya memahami topik: **ringkasan, platform, produk terlaris, hari spesial (tgl kembar/peak), performa admin, jam/hari terbaik, dan strategi**. Klik salah satu saran di bawah, atau masukkan **API key** di Pengaturan agar AI bisa menjawab pertanyaan apa pun tentang database.');
+    bubble.md('Saya belum menangkap maksud pertanyaan itu. Coba sebut **apa yang dihitung** (omzet, order, unit, nota, fee), **dikelompokkan per apa** (platform, produk, brand, kategori, admin, bulan, hari, jam) dan **periodenya**. Contoh:\n- "omzet per platform bulan ini"\n- "10 produk terlaris agustus 2026"\n- "bandingkan omzet shopee vs tokopedia bulan lalu"\n- "berapa nota Vania di Tokopedia minggu lalu"\n- "omzet per hari 1 sampai 15 september"');
   }
 }
 async function askAI(q){
@@ -1840,7 +2024,7 @@ function aiClear(){
 }
 function aiWelcome(){
   const d = document.createElement('div'); d.className = 'amsg a';
-  d.innerHTML = '<div class="amd">' + mdToHtml('Halo! Saya **Asisten AI** untuk data penjualan Anda. Tanyakan apa saja, misalnya:\n- "Bandingkan omzet Shopee vs Tokopedia 3 bulan terakhir"\n- "Produk apa yang turun penjualannya bulan ini dibanding bulan lalu?"\n- "Berapa omzet tanggal 25 dibanding hari biasa? Apa strategi promonya?"\n- "Admin siapa yang paling banyak mencetak nota di Tokopedia?"\n\nSaya bisa menampilkan **grafik dan tabel**, serta menyusun **strategi pemasaran & penjualan** berdasarkan angka di database.') + '</div>';
+  d.innerHTML = '<div class="amd">' + mdToHtml('Halo! Saya **Asisten Data**. Tanyakan tentang angka di database dengan kalimat biasa, misalnya:\n- "omzet per platform bulan ini"\n- "bandingkan omzet shopee vs tokopedia agustus 2026"\n- "10 produk terlaris bulan lalu"\n- "berapa nota Vania di Tokopedia minggu lalu"\n- "omzet per hari 1 sampai 15 september"\n- "strategi menaikkan omzet bulan depan"\n\nSaya menjawab dengan **angka, tabel, dan grafik**, dihitung dari data Anda. Waktu seperti "bulan ini" dihitung dari **tanggal data terakhir**.') + '</div>';
   $('#aiMsgs').appendChild(d);
 }
 function renderAIPage(){
